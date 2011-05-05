@@ -10,12 +10,17 @@
 #include <unistd.h>
 
 #include <gnutls/gnutls.h>
+#include <gnutls/extra.h>
 #include <gnutls/abstract.h>
 #include <gnutls/x509.h>
 
 
 #define CA_CERT_FILE "/home/sqs/src/pakeproxy/data/ca-cert.pem"
 #define CA_KEY_FILE "/home/sqs/src/pakeproxy/data/ca-key.pem"
+#define CAFILE CA_CERT_FILE
+#define SRPHOST "gnutls-db.trustedhttp.org"
+#define SRPUSER "user"
+#define SRPPASSWD "secret"
 
 const int kListenPort = 4443;
 
@@ -29,6 +34,33 @@ const int kListenPort = 4443;
 gnutls_priority_t priority_cache;
 static gnutls_x509_crt_t ca_crt;
 static gnutls_x509_privkey_t ca_key;
+
+int
+tcp_connect2 (char *server)
+{
+  const char *PORT = "443";
+  int err, sd;
+  struct sockaddr_in sa;
+
+  /* connects to server
+   */
+  sd = socket (AF_INET, SOCK_STREAM, 0);
+
+  memset (&sa, '\0', sizeof (sa));
+  sa.sin_family = AF_INET;
+  sa.sin_port = htons (atoi (PORT));
+  inet_pton (AF_INET, server, &sa.sin_addr);
+
+  err = connect (sd, (struct sockaddr *) & sa, sizeof (sa));
+  if (err < 0)
+    {
+      fprintf (stderr, "Connect error\n");
+      exit (1);
+    }
+
+  return sd;
+}
+
 
 /* Helper functions to load a certificate and key
  * files into memory. From gnutls ex-cert-select.c.
@@ -141,7 +173,6 @@ generate_private_key_int (void)
 
 static char* make_fake_common_name(gnutls_session_t session) {
   int ret;
-  char *common_name;
   char *user;
   char server_name[SERVER_NAME_BUFFER_SIZE];
   size_t server_name_size = SERVER_NAME_BUFFER_SIZE;
@@ -280,6 +311,12 @@ static gnutls_session_t initialize_tls_session() {
   return session;
 }
 
+int srp_cred_callback(gnutls_session_t session, char **username, char **password) {
+  *username = SRPUSER;
+  *password = SRPPASSWD;
+  return 0;
+}
+
 int main(int argc, char **argv) {
   int err, listen_sd;
   int sd, ret;
@@ -294,6 +331,10 @@ int main(int argc, char **argv) {
   ret = gnutls_global_init();
   if (ret != GNUTLS_E_SUCCESS)
     errx(ret, "gnutls_global_init: %s", gnutls_strerror(ret));
+
+  ret = gnutls_global_init_extra();
+  if (ret != GNUTLS_E_SUCCESS)
+    errx(ret, "gnutls_global_init_extra: %s", gnutls_strerror(ret));
 
   load_ca_cert_and_key();
   
@@ -337,7 +378,7 @@ int main(int argc, char **argv) {
     if (ret != GNUTLS_E_SUCCESS) {
       close(sd);
       gnutls_deinit(session);
-      fprintf(stderr, "handshake failed: %s\n\n", gnutls_strerror(ret));
+      fprintf(stderr, "CLIENT handshake failed: %s\n\n", gnutls_strerror(ret));
       continue;
     }
     printf("handshake OK\n");
@@ -345,28 +386,112 @@ int main(int argc, char **argv) {
     /* see the Getting peer's information example */
     /* print_info(session); */
 
+    /**** SRP ****/
+    int sd2;
+    gnutls_session_t session2;
+    gnutls_srp_client_credentials_t srp_cred2;
+    gnutls_certificate_credentials_t cert_cred2;
+
+    gnutls_srp_allocate_client_credentials (&srp_cred2);
+    gnutls_certificate_allocate_credentials (&cert_cred2);
+    gnutls_certificate_set_x509_trust_file (cert_cred2, CAFILE,
+                                            GNUTLS_X509_FMT_PEM);
+
+    //    ret = gnutls_srp_set_client_credentials(srp_cred2, SRPUSER, SRPPASSWD);
+      /*   if (ret != GNUTLS_E_SUCCESS) */
+      /* errx(1, "gnutls_srp_set_client_credentials: %s", gnutls_strerror(ret)); */
+    gnutls_srp_set_client_credentials_function(srp_cred2, srp_cred_callback);
+    
+    sd2 = tcp_connect2(SRPHOST);
+    gnutls_init(&session2, GNUTLS_CLIENT);
+    gnutls_priority_set_direct(session2, "NONE:+AES-256-CBC:+AES-128-CBC:+SRP:+SHA1:+COMP-NULL:+VERS-TLS1.1:+VERS-TLS1.0", NULL);
+    
+    ret = gnutls_credentials_set(session2, GNUTLS_CRD_SRP, srp_cred2);
+    if (ret != GNUTLS_E_SUCCESS)
+      errx(1, "gnutls_credentials_set SRP: %s", gnutls_strerror(ret));
+    
+    ret = gnutls_credentials_set (session2, GNUTLS_CRD_CERTIFICATE, cert_cred2);
+    if (ret != GNUTLS_E_SUCCESS)
+      errx(1, "gnutls_credentials_set CRT: %s", gnutls_strerror(ret));
+
+    gnutls_server_name_set(session2, GNUTLS_NAME_DNS, SRPHOST, strlen(SRPHOST));
+    gnutls_transport_set_ptr(session2, (gnutls_transport_ptr_t) sd2);
+    ret = gnutls_handshake(session2);
+    if (ret < 0) {
+      fprintf(stderr, "*** proxy<->server handshake failed\n");
+      gnutls_perror(ret);
+      exit(1);
+    } else {
+      printf("- completed SRP handshake\n");
+    }
+
+    /*************/
+
     for (;;)
     {
-      memset(buffer, 0, MAX_BUF + 1);
-      ret = gnutls_record_recv(session, buffer, MAX_BUF);
+      fd_set rfds;
+      int nfds;
+      FD_ZERO(&rfds);
+      FD_SET(sd, &rfds);
+      FD_SET(sd2, &rfds);
+      nfds = (sd > sd2 ? sd : sd2);
 
-      if (ret == 0)
-      {
-        printf("\n- Peer has closed the GnuTLS connection\n");
-        break;
+      ret = select(nfds+1, &rfds, NULL, NULL, NULL);
+
+      if (ret == -1 && errno == EINTR) {
+        warnx("select interrupted\n");
+        continue;
       }
-      else if (ret < 0)
-      {
-        fprintf(stderr, "\n*** Received corrupted "
-                 "data(%d). Closing the connection.\n\n", ret);
-        break;
+
+      if (ret == -1) {
+        errx(1, "select()");
       }
-      else if (ret > 0)
-      {
-        /* echo data back to the client
-         */
-        gnutls_record_send(session, buffer, strlen(buffer));
+      
+      printf("loop\n");
+      /* SEND FROM CLIENT TO HOST */
+      memset(buffer, 0, MAX_BUF + 1);
+      if (FD_ISSET(sd, &rfds)) {
+        printf("- RECV from CLIENT\n");
+        ret = gnutls_record_recv(session, buffer, MAX_BUF);
+        if (ret == 0)
+        {
+          printf("\n- CLIENT has closed the GnuTLS connection\n");
+          break;
+        }
+        else if (ret < 0)
+        {
+          fprintf(stderr, "\n*** Received corrupted "
+                  "data(%d) from CLIENT. Closing the connection.\n\n", ret);
+          break;
+        }
+        else if (ret > 0)
+        {
+          gnutls_record_send(session2, buffer, strlen(buffer));
+        }
       }
+
+      /* SEND FROM HOST TO CLIENT */
+      memset(buffer, 0, MAX_BUF + 1);
+      if (FD_ISSET(sd2, &rfds)) {
+        printf("RECV from server\n");
+        ret = gnutls_record_recv(session2, buffer, MAX_BUF);
+        if (ret == 0)
+        {
+          printf("\n- HOST has closed the GnuTLS connection\n");
+          break;
+        }
+        else if (ret < 0)
+        {
+          fprintf(stderr, "\n*** Received corrupted "
+                  "data(%d) from HOST. Closing the connection.\n\n", ret);
+          break;
+        }
+        else if (ret > 0)
+        {
+          printf("- send %u bytes to CLIENT\n", strlen(buffer));
+          gnutls_record_send(session, buffer, strlen(buffer));
+        }
+      }      
     }
     printf("\n");
     /* do not wait for the peer to close the connection.
