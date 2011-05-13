@@ -221,7 +221,7 @@ static int do_accept(int listen_sd,
                      gnutls_session_t *session,
                      pp_config_t *cfg) {
   struct sockaddr_in sa_cli;
-  socklen_t client_len = sizeof(sa_cli);;
+  socklen_t client_len = sizeof(sa_cli);
   char topbuf[512];
   pp_session_t *ppsession;
   int sd;
