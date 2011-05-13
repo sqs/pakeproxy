@@ -112,7 +112,7 @@ static gnutls_x509_privkey_t generate_private_key_int() {
   if (ret < 0)
     errx(ret, "privkey_init: %s", gnutls_strerror(ret));
 
-  bits = gnutls_sec_param_to_pk_bits(key_type, GNUTLS_SEC_PARAM_NORMAL);
+  bits = gnutls_sec_param_to_pk_bits(key_type, GNUTLS_SEC_PARAM_LOW);
 
   fprintf(stderr, "Generating a %d bit %s private key...\n",
           bits, gnutls_pk_algorithm_get_name(key_type));
