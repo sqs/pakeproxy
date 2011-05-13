@@ -8,7 +8,7 @@ clean:
 
 ca-key.pem:
 	echo generating CA key
-	certtool --generate-privkey --outfile $@
+	certtool --generate-privkey --bits 1024 --outfile $@
 
 ca-cert.pem:
 	echo generating CA signing cert
