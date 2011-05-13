@@ -1,3 +1,5 @@
+#include "pakeproxy.h"
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <errno.h>
@@ -33,8 +35,7 @@ const int kListenPort = 8443;
 
 /* These are global */
 gnutls_priority_t priority_cache;
-static gnutls_x509_crt_t ca_crt;
-static gnutls_x509_privkey_t ca_key;
+static pakeproxy_ca_t global_ca;
 
 void read_http_connect(int sd, char** host, int* port) {
   char buf[MAX_BUF];
@@ -111,119 +112,6 @@ tcp_connect2 (char *server)
   return sd;
 }
 
-typedef struct {
-  char *connect_host;
-  int connect_port;
-} proxy_stream_t;
-
-typedef struct {
-  proxy_stream_t *proxy_stream;
-} pakeproxy_session_t;
-
-static gnutls_x509_privkey_t
-generate_private_key_int (void)
-{
-  gnutls_x509_privkey_t key;
-  int ret, key_type, bits;
-
-  key_type = GNUTLS_PK_RSA;
-
-  ret = gnutls_x509_privkey_init (&key);
-  if (ret < 0)
-    errx (ret, "privkey_init: %s", gnutls_strerror (ret));
-
-  bits = gnutls_sec_param_to_pk_bits(key_type, GNUTLS_SEC_PARAM_NORMAL);
-
-  fprintf (stderr, "Generating a %d bit %s private key...\n",
-           bits, gnutls_pk_algorithm_get_name (key_type));
-
-  ret = gnutls_x509_privkey_generate (key, key_type, bits, 0);
-  if (ret < 0)
-    errx (ret, "privkey_generate: %s", gnutls_strerror (ret));
-
-  return key;
-}
-
-static char* make_fake_common_name(gnutls_session_t session) {
-  int ret;
-  char *user;
-  char *common_name_buf;
-  pakeproxy_session_t *ppsession;
-  static const int kCommonNameBufferSize = 1000;
-
-  user = "sqs";
-  ppsession = gnutls_session_get_ptr(session);
-
-  if (ppsession->proxy_stream->connect_host == NULL) {
-    char server_name[SERVER_NAME_BUFFER_SIZE];
-    size_t server_name_size = SERVER_NAME_BUFFER_SIZE;
-    unsigned int server_name_type;
-    ret = gnutls_server_name_get(session, &server_name, &server_name_size,
-                                 &server_name_type, 0);
-    if (ret != GNUTLS_E_SUCCESS)
-      err(1, "gnutls_server_name_get: %s", gnutls_strerror(ret));
-  }
-
-  common_name_buf = malloc(kCommonNameBufferSize);
-  if (common_name_buf == NULL)
-    errx(1, "malloc kCommonNameBufferSize");
-
-  snprintf(common_name_buf, kCommonNameBufferSize,
-           "%s@%s (SRP)", user, ppsession->proxy_stream->connect_host);
-  return common_name_buf;
-}
-
-static int create_x509_for_host_and_user(gnutls_session_t session,
-                                         gnutls_x509_crt_t *crt,
-                                         gnutls_x509_privkey_t *key) {
-  int ret;
-  char *common_name;
-
-  *key = generate_private_key_int();
-
-  ret = gnutls_x509_crt_init(crt);
-  if (ret < 0)
-    errx(ret, "gnutls_x509_crt_init: %s", gnutls_strerror(ret));
-
-  common_name = make_fake_common_name(session);  
-  gnutls_x509_crt_set_dn_by_oid(*crt, GNUTLS_OID_X520_COMMON_NAME, 0, common_name, strlen(common_name));
-  if (ret < 0)
-    errx(ret, "gnutls_x509_crt_set_dn_by_oid common name: %s", gnutls_strerror(ret));
-
-  ret = gnutls_x509_crt_set_key(*crt, *key);
-  if (ret < 0)
-    errx(ret, "gnutls_x509_crt_set_key: %s", gnutls_strerror(ret));
-
-  gnutls_x509_crt_set_version(*crt, 1);
-  int crt_serial = rand();
-  gnutls_x509_crt_set_serial(*crt, &crt_serial, sizeof(int));
-
-  gnutls_x509_crt_set_activation_time(*crt, time(NULL));
-  /* 10 days */
-  ret = gnutls_x509_crt_set_expiration_time(*crt, time(NULL) + 10*24*60*60);
-  if (ret < 0)
-    errx(ret, "gnutls_x509_crt_set_expiration_time: %s", gnutls_strerror(ret));
-
-  ret = gnutls_x509_crt_set_basic_constraints(*crt, 0, -1);
-  if (ret < 0)
-    errx(ret, "gnutls_x509_crt_set_basic_constraints: %s", gnutls_strerror(ret));
-
-  ret = gnutls_x509_crt_set_key_purpose_oid (*crt, GNUTLS_KP_TLS_WWW_SERVER, 0);
-  if (ret < 0)
-    errx(ret, "gnutls_x509_crt_set_key_purpose_oid GNUTLS_KP_TLS_WWW_SERVER: %s",
-         gnutls_strerror(ret));
-
-  fprintf(stderr, "Signing certificate...\n");
-
-  ret = gnutls_x509_crt_sign2(*crt, ca_crt, ca_key, GNUTLS_DIG_SHA256, 0);
-  if (ret < 0)
-    errx(ret, "gnutls_x509_crt_sign2: %s", gnutls_strerror(ret));
-
-  fprintf(stderr, "Signed certificate\n");
-
-  return 0;
-}
-
 static int retrieve_server_cert(gnutls_session_t session,
                                 const gnutls_datum_t* req_ca_dn,
                                 int nreqs,
@@ -239,7 +127,7 @@ static int retrieve_server_cert(gnutls_session_t session,
   if (crt == NULL)
     errx(1, "malloc gnutls_x509_crt_t");
 
-  create_x509_for_host_and_user(session, crt, &key);
+  create_x509_for_host_and_user(session, &global_ca, crt, &key);
 
   st->cert_type = GNUTLS_CRT_X509;
   st->key_type = GNUTLS_PRIVKEY_X509;
@@ -313,7 +201,7 @@ int main(int argc, char **argv) {
   if (ret != GNUTLS_E_SUCCESS)
     errx(ret, "gnutls_global_init_extra: %s", gnutls_strerror(ret));
 
-  load_ca_cert_and_key(CA_CERT_FILE, &ca_crt, CA_KEY_FILE, &ca_key);
+  load_ca_cert_and_key(&global_ca, CA_CERT_FILE, CA_KEY_FILE);
   
   ret = gnutls_priority_init(&priority_cache, "NORMAL", NULL);
   if (ret != GNUTLS_E_SUCCESS)
