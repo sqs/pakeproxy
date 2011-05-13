@@ -10,10 +10,11 @@
 #include "pakeproxy.h"
 
 #define SERVER_NAME_BUFFER_SIZE 1024
+#define X509_DISPLAY_NAME_BUFFER_SIZE 1024
 
 static gnutls_datum_t load_file(const char *file);
 static void unload_file(gnutls_datum_t data);
-static char* make_fake_common_name(gnutls_session_t session);
+static char* get_display_name(gnutls_session_t session);
 static gnutls_x509_privkey_t generate_private_key_int();
 
 void load_ca_cert_and_key(pp_ca_t* ca,
@@ -59,6 +60,8 @@ int create_x509_for_host_and_user(gnutls_session_t session,
                                   gnutls_x509_privkey_t* key) {
   int ret;
   char *common_name;
+  char *display_name;
+  pp_session_t *ppsession;
 
   *key = generate_private_key_int();
 
@@ -66,17 +69,26 @@ int create_x509_for_host_and_user(gnutls_session_t session,
   if (ret < 0)
     errx(ret, "gnutls_x509_crt_init: %s", gnutls_strerror(ret));
 
-  common_name = make_fake_common_name(session);  
-  gnutls_x509_crt_set_dn_by_oid(*crt, GNUTLS_OID_X520_COMMON_NAME, 0,
-                                common_name, strlen(common_name));
+  ppsession = gnutls_session_get_ptr(session);
+  common_name = ppsession->target_host;  
+  ret = gnutls_x509_crt_set_dn_by_oid(*crt, GNUTLS_OID_X520_COMMON_NAME, 0,
+                                      common_name, strlen(common_name));
   if (ret < 0)
     errx(ret, "gnutls_x509_crt_set_dn_by_oid common name: %s", gnutls_strerror(ret));
 
+  display_name = get_display_name(session);
+  ret = gnutls_x509_crt_set_dn_by_oid(*crt, GNUTLS_OID_X520_ORGANIZATION_NAME, 0,
+                                      display_name, strlen(display_name));
+  if (ret < 0)
+    errx(ret, "gnutls_x509_crt_set_dn_by_oid display name: %s", gnutls_strerror(ret));
+  
   ret = gnutls_x509_crt_set_key(*crt, *key);
   if (ret < 0)
     errx(ret, "gnutls_x509_crt_set_key: %s", gnutls_strerror(ret));
 
   gnutls_x509_crt_set_version(*crt, 1);
+  
+  srand(time(NULL));
   int crt_serial = rand();
   gnutls_x509_crt_set_serial(*crt, &crt_serial, sizeof(int));
 
@@ -124,33 +136,21 @@ static gnutls_x509_privkey_t generate_private_key_int() {
   return key;
 }
 
-static char* make_fake_common_name(gnutls_session_t session) {
-  int ret;
+static char* get_display_name(gnutls_session_t session) {
   char *user;
-  char *common_name_buf;
+  char *buf;
   pp_session_t *ppsession;
-  static const int kCommonNameBufferSize = 1000;
 
   user = "sqs";
   ppsession = gnutls_session_get_ptr(session);
 
-  if (ppsession->target_host == NULL) {
-    char server_name[SERVER_NAME_BUFFER_SIZE];
-    size_t server_name_size = SERVER_NAME_BUFFER_SIZE;
-    unsigned int server_name_type;
-    ret = gnutls_server_name_get(session, &server_name, &server_name_size,
-                                 &server_name_type, 0);
-    if (ret != GNUTLS_E_SUCCESS)
-      err(1, "gnutls_server_name_get: %s", gnutls_strerror(ret));
-  }
+  buf = malloc(X509_DISPLAY_NAME_BUFFER_SIZE);
+  if (buf == NULL)
+    errx(1, "malloc get_display_name buf");
 
-  common_name_buf = malloc(kCommonNameBufferSize);
-  if (common_name_buf == NULL)
-    errx(1, "malloc kCommonNameBufferSize");
-
-  snprintf(common_name_buf, kCommonNameBufferSize,
+  snprintf(buf, X509_DISPLAY_NAME_BUFFER_SIZE,
            "%s@%s (SRP)", user, ppsession->target_host);
-  return common_name_buf;
+  return buf;
 }
 
 /* Helper functions to load a certificate and key
