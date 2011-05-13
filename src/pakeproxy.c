@@ -118,6 +118,7 @@ err:
 int main(int argc, char **argv) {
   int listen_sd;
   int ret;
+  pid_t pid;
   gnutls_session_t session;
   pp_config_t cfg;
 
@@ -136,6 +137,16 @@ int main(int argc, char **argv) {
     ret = do_accept(listen_sd, &session, &cfg);
     if (ret != GNUTLS_E_SUCCESS)
       break;
+
+    pid = fork();
+    if (pid == -1) {
+      perror("fork");
+      exit(1);
+    } else if (pid != 0) {
+      /* in parent */
+      fprintf(stderr, "- Forked child %d\n", pid);
+      continue;
+    }
     
     ret = do_https_tunnel(session);
     if (ret != GNUTLS_E_SUCCESS)
@@ -144,6 +155,9 @@ int main(int argc, char **argv) {
     gnutls_bye(session, GNUTLS_SHUT_WR);
     close((int)(long)gnutls_transport_get_ptr(session));
     gnutls_deinit(session);
+
+    if (pid == 0)
+      break;
   }
 
   close(listen_sd);
