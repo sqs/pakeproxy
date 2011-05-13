@@ -1,5 +1,5 @@
 PRODUCT=pakeproxy
-SOURCES=pakeproxy.c
+SOURCES=pakeproxy.c cert.c
 OBJS=$(SOURCES:.c=.o)
 
 LIBS=-L/usr/local/lib -lgnutls -lgnutls-extra

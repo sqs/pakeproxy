@@ -15,6 +15,7 @@
 #include <gnutls/abstract.h>
 #include <gnutls/x509.h>
 
+#include "cert.h"
 
 #define CA_CERT_FILE "/home/sqs/src/pakeproxy/data/ca-cert.pem"
 #define CA_KEY_FILE "/home/sqs/src/pakeproxy/data/ca-key.pem"
@@ -119,74 +120,6 @@ typedef struct {
   proxy_stream_t *proxy_stream;
 } pakeproxy_session_t;
 
-/* Helper functions to load a certificate and key
- * files into memory. From gnutls ex-cert-select.c.
- */
-static gnutls_datum_t
-load_file (const char *file)
-{
-  FILE *f;
-  gnutls_datum_t loaded_file = { NULL, 0 };
-  long filelen;
-  void *ptr;
-
-  if (!(f = fopen (file, "r"))
-      || fseek (f, 0, SEEK_END) != 0
-      || (filelen = ftell (f)) < 0
-      || fseek (f, 0, SEEK_SET) != 0
-      || !(ptr = malloc ((size_t) filelen))
-      || fread (ptr, 1, (size_t) filelen, f) < (size_t) filelen)
-    {
-      return loaded_file;
-    }
-
-  loaded_file.data = ptr;
-  loaded_file.size = (unsigned int) filelen;
-  return loaded_file;
-}
-
-static void
-unload_file (gnutls_datum_t data)
-{
-  free (data.data);
-}
-
-static void load_ca_cert_and_key() {
-  int ret;
-  gnutls_datum_t data;
-
-  /* CA cert */
-  data = load_file(CA_CERT_FILE);
-  if (data.data == NULL)
-    err(1, "error loading CA_CERT_FILE: " CA_CERT_FILE);
-
-  ret = gnutls_x509_crt_init(&ca_crt);
-  if (ret != GNUTLS_E_SUCCESS)
-    errx(ret, "gnutls_x509_crt_init: %s", gnutls_strerror(ret));
-
-  ret = gnutls_x509_crt_import(ca_crt, &data, GNUTLS_X509_FMT_PEM);
-  if (ret != GNUTLS_E_SUCCESS)
-    errx(ret, "gnutls_x509_crt_import: %s", gnutls_strerror(ret));
-
-  unload_file(data);
-
-  /* CA key */
-  data = load_file(CA_KEY_FILE);
-  if (data.data == NULL)
-    err(1, "error loading CA_KEY_FILE: " CA_KEY_FILE);
-
-  ret = gnutls_x509_privkey_init(&ca_key);
-  if (ret != GNUTLS_E_SUCCESS)
-    errx(ret, "gnutls_x509_privkey_init: %s", gnutls_strerror(ret));
-
-  ret = gnutls_x509_privkey_import(ca_key, &data, GNUTLS_X509_FMT_PEM);
-  if (ret != GNUTLS_E_SUCCESS)
-    errx(ret, "gnutls_x509_privkey_import: %s", gnutls_strerror(ret));
-
-  unload_file(data);
-
-  printf("- loaded CA cert and key\n");
-}
 
 static gnutls_digest_algorithm_t get_dig (gnutls_x509_crt crt) {
   gnutls_digest_algorithm_t dig;
@@ -397,7 +330,7 @@ int main(int argc, char **argv) {
   if (ret != GNUTLS_E_SUCCESS)
     errx(ret, "gnutls_global_init_extra: %s", gnutls_strerror(ret));
 
-  load_ca_cert_and_key();
+  load_ca_cert_and_key(CA_CERT_FILE, &ca_crt, CA_KEY_FILE, &ca_key);
   
   ret = gnutls_priority_init(&priority_cache, "NORMAL", NULL);
   if (ret != GNUTLS_E_SUCCESS)
