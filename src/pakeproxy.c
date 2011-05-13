@@ -120,23 +120,6 @@ typedef struct {
   proxy_stream_t *proxy_stream;
 } pakeproxy_session_t;
 
-
-static gnutls_digest_algorithm_t get_dig (gnutls_x509_crt crt) {
-  gnutls_digest_algorithm_t dig;
-  int ret;
-  unsigned int mand;
-
-  printf("** get_dig: crt@%p\n", &crt);
-
-  return GNUTLS_DIG_SHA256;
-
-  ret = gnutls_pubkey_get_preferred_hash_algorithm((gnutls_pubkey_t)crt, &dig, &mand);
-  if (ret != 0)
-    errx (ret, "crl_preferred_hash_algorithm: %s", gnutls_strerror (ret));
-
-  return dig;
-}
-
 static gnutls_x509_privkey_t
 generate_private_key_int (void)
 {
@@ -232,7 +215,7 @@ static int create_x509_for_host_and_user(gnutls_session_t session,
 
   fprintf(stderr, "Signing certificate...\n");
 
-  ret = gnutls_x509_crt_sign2(*crt, ca_crt, ca_key, get_dig(ca_crt), 0);
+  ret = gnutls_x509_crt_sign2(*crt, ca_crt, ca_key, GNUTLS_DIG_SHA256, 0);
   if (ret < 0)
     errx(ret, "gnutls_x509_crt_sign2: %s", gnutls_strerror(ret));
 
