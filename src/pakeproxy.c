@@ -6,6 +6,7 @@
 #include <sys/socket.h>
 #include <arpa/inet.h>
 #include <netinet/in.h>
+#include <netdb.h>
 #include <string.h>
 #include <unistd.h>
 
@@ -18,11 +19,10 @@
 #define CA_CERT_FILE "/home/sqs/src/pakeproxy/data/ca-cert.pem"
 #define CA_KEY_FILE "/home/sqs/src/pakeproxy/data/ca-key.pem"
 #define CAFILE CA_CERT_FILE
-#define SRPHOST "gnutls-db.trustedhttp.org"
 #define SRPUSER "user"
 #define SRPPASSWD "secret"
 
-const int kListenPort = 4443;
+const int kListenPort = 8443;
 
 #define SA struct sockaddr
 #define SOCKET_ERR(err,s) if(err==-1) {perror(s);return(1);}
@@ -35,12 +35,54 @@ gnutls_priority_t priority_cache;
 static gnutls_x509_crt_t ca_crt;
 static gnutls_x509_privkey_t ca_key;
 
+void read_http_connect(int sd, char** host, int* port) {
+  char buf[MAX_BUF];
+  char *cur = buf;
+  ssize_t len;
+  ssize_t total_len = 0;
+  int i;
+
+  for (;;) {
+    len = recv(sd, cur, MAX_BUF - (cur - buf), 0);
+    if (len == -1)
+      break;
+    cur += len;
+    total_len += len;
+    printf("recv %u\n", len);
+    //printf("cur - 4 = '%s'\n", cur-4);
+    if (strncmp(cur - 4, "\r\n\r\n", 4) == 0)
+      break;
+  }
+
+  buf[MAX_BUF-1] = '\0';
+  // printf("recv %u bytes: <<<%s>>>\n", total_len, buf);
+  
+  if (strncmp(buf, "CONNECT ", strlen("CONNECT ")) == 0) {
+    *host = buf + strlen("CONNECT ");
+    for (i = 0; i < total_len; i++) {
+      if ((*host)[i] == ':') {
+        (*host)[i] = '\0';
+        *port = atoi(&(*host)[i+1]);
+        break;
+      }
+    }
+    *host = strdup(*host);
+    printf("HOST = '%s' port %d\n", *host, *port);
+
+    strcpy(buf, "HTTP/1.1 200 OK\r\n\r\n");
+    len = send(sd, buf, strlen(buf), 0);
+    if (len != strlen(buf))
+      fprintf(stderr, "couldnt send full buf\n");
+  }
+}
+
 int
 tcp_connect2 (char *server)
 {
   const char *PORT = "443";
   int err, sd;
   struct sockaddr_in sa;
+  struct hostent *hp;
 
   /* connects to server
    */
@@ -49,7 +91,14 @@ tcp_connect2 (char *server)
   memset (&sa, '\0', sizeof (sa));
   sa.sin_family = AF_INET;
   sa.sin_port = htons (atoi (PORT));
-  inet_pton (AF_INET, server, &sa.sin_addr);
+
+  hp = gethostbyname(server);
+  if (hp == NULL)
+    errx(1, "gethostbyname error");
+
+  if (hp->h_addr_list[0] == NULL)
+    errx(1, "gethostbyname empty h_addr_list");
+  sa.sin_addr = *(struct in_addr *)hp->h_addr_list[0];
 
   err = connect (sd, (struct sockaddr *) & sa, sizeof (sa));
   if (err < 0)
@@ -61,6 +110,14 @@ tcp_connect2 (char *server)
   return sd;
 }
 
+typedef struct {
+  char *connect_host;
+  int connect_port;
+} proxy_stream_t;
+
+typedef struct {
+  proxy_stream_t *proxy_stream;
+} pakeproxy_session_t;
 
 /* Helper functions to load a certificate and key
  * files into memory. From gnutls ex-cert-select.c.
@@ -174,25 +231,29 @@ generate_private_key_int (void)
 static char* make_fake_common_name(gnutls_session_t session) {
   int ret;
   char *user;
-  char server_name[SERVER_NAME_BUFFER_SIZE];
-  size_t server_name_size = SERVER_NAME_BUFFER_SIZE;
-  unsigned int server_name_type;
   char *common_name_buf;
+  pakeproxy_session_t *ppsession;
   static const int kCommonNameBufferSize = 1000;
 
   user = "sqs";
-  
-  ret = gnutls_server_name_get(session, &server_name, &server_name_size,
-                               &server_name_type, 0);
-  if (ret != GNUTLS_E_SUCCESS)
-    err(1, "gnutls_server_name_get: %s", gnutls_strerror(ret));
+  ppsession = gnutls_session_get_ptr(session);
+
+  if (ppsession->proxy_stream->connect_host == NULL) {
+    char server_name[SERVER_NAME_BUFFER_SIZE];
+    size_t server_name_size = SERVER_NAME_BUFFER_SIZE;
+    unsigned int server_name_type;
+    ret = gnutls_server_name_get(session, &server_name, &server_name_size,
+                                 &server_name_type, 0);
+    if (ret != GNUTLS_E_SUCCESS)
+      err(1, "gnutls_server_name_get: %s", gnutls_strerror(ret));
+  }
 
   common_name_buf = malloc(kCommonNameBufferSize);
   if (common_name_buf == NULL)
     errx(1, "malloc kCommonNameBufferSize");
 
   snprintf(common_name_buf, kCommonNameBufferSize,
-           "%s@%s (SRP)", user, server_name);
+           "%s@%s (SRP)", user, ppsession->proxy_stream->connect_host);
   return common_name_buf;
 }
 
@@ -218,7 +279,7 @@ static int create_x509_for_host_and_user(gnutls_session_t session,
     errx(ret, "gnutls_x509_crt_set_key: %s", gnutls_strerror(ret));
 
   gnutls_x509_crt_set_version(*crt, 1);
-  int crt_serial = 123;
+  int crt_serial = rand();
   gnutls_x509_crt_set_serial(*crt, &crt_serial, sizeof(int));
 
   gnutls_x509_crt_set_activation_time(*crt, time(NULL));
@@ -319,7 +380,7 @@ int srp_cred_callback(gnutls_session_t session, char **username, char **password
 
 int main(int argc, char **argv) {
   int err, listen_sd;
-  int sd, ret;
+  int ret, sd, sd2;
   struct sockaddr_in sa_serv;
   struct sockaddr_in sa_cli;
   socklen_t client_len;
@@ -372,7 +433,13 @@ int main(int argc, char **argv) {
             inet_ntop(AF_INET, &sa_cli.sin_addr, topbuf,
                        sizeof(topbuf)), ntohs(sa_cli.sin_port));
 
+    pakeproxy_session_t ppsession;
+    proxy_stream_t pstream;
+    ppsession.proxy_stream = &pstream;
+    read_http_connect(sd, &pstream.connect_host, &pstream.connect_port);
+
     gnutls_transport_set_ptr(session, (gnutls_transport_ptr_t)sd);
+    gnutls_session_set_ptr(session, &ppsession);
 
     ret = gnutls_handshake(session);
     if (ret != GNUTLS_E_SUCCESS) {
@@ -387,7 +454,6 @@ int main(int argc, char **argv) {
     /* print_info(session); */
 
     /**** SRP ****/
-    int sd2;
     gnutls_session_t session2;
     gnutls_srp_client_credentials_t srp_cred2;
     gnutls_certificate_credentials_t cert_cred2;
@@ -402,7 +468,7 @@ int main(int argc, char **argv) {
       /* errx(1, "gnutls_srp_set_client_credentials: %s", gnutls_strerror(ret)); */
     gnutls_srp_set_client_credentials_function(srp_cred2, srp_cred_callback);
     
-    sd2 = tcp_connect2(SRPHOST);
+    sd2 = tcp_connect2(ppsession.proxy_stream->connect_host);
     gnutls_init(&session2, GNUTLS_CLIENT);
     gnutls_priority_set_direct(session2, "NONE:+AES-256-CBC:+AES-128-CBC:+SRP:+SHA1:+COMP-NULL:+VERS-TLS1.1:+VERS-TLS1.0", NULL);
     
@@ -414,8 +480,8 @@ int main(int argc, char **argv) {
     if (ret != GNUTLS_E_SUCCESS)
       errx(1, "gnutls_credentials_set CRT: %s", gnutls_strerror(ret));
 
-    gnutls_server_name_set(session2, GNUTLS_NAME_DNS, SRPHOST, strlen(SRPHOST));
-    gnutls_transport_set_ptr(session2, (gnutls_transport_ptr_t) sd2);
+    gnutls_server_name_set(session2, GNUTLS_NAME_DNS, ppsession.proxy_stream->connect_host, strlen(ppsession.proxy_stream->connect_host));
+    gnutls_transport_set_ptr(session2, (gnutls_transport_ptr_t)sd2);
     ret = gnutls_handshake(session2);
     if (ret < 0) {
       fprintf(stderr, "*** proxy<->server handshake failed\n");

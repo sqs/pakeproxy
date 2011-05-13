@@ -1,7 +1,11 @@
+.PHONY: src
+
+default: src
+
 certs:
 	make -C data
 
-default:
+src:
 	make -C src
 
 clean:
