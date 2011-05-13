@@ -4,17 +4,22 @@
 #include <gnutls/x509.h>
 
 typedef struct {
-  char *connect_host;
-  int connect_port;
-} proxy_stream_t;
+  const char *listen_host;
+  int listen_port;
+  const char *ca_cert_file;
+  const char *ca_key_file;
+  const char *client_priority;
+} pp_config_t;
 
 typedef struct {
-  proxy_stream_t *proxy_stream;
-} pakeproxy_session_t;
+  pp_config_t *cfg;
+  char *target_host;
+  int target_port;
+} pp_session_t;
 
 typedef struct {
   gnutls_x509_crt_t crt;
   gnutls_x509_privkey_t key;
-} pakeproxy_ca_t;
+} pp_ca_t;
 
 #endif // PAKEPROXY_H

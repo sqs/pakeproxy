@@ -3,6 +3,7 @@
 #include <err.h>
 #include <stdlib.h>
 #include <stdio.h>
+#include <string.h>
 
 #include <gnutls/gnutls.h>
 
@@ -15,9 +16,9 @@ static void unload_file(gnutls_datum_t data);
 static char* make_fake_common_name(gnutls_session_t session);
 static gnutls_x509_privkey_t generate_private_key_int();
 
-void load_ca_cert_and_key(pakeproxy_ca_t *ca,
-                          char* ca_cert_file,
-                          char* ca_key_file) {
+void load_ca_cert_and_key(pp_ca_t* ca,
+                          const char* ca_cert_file,
+                          const char* ca_key_file) {
   int ret;
   gnutls_datum_t data;
 
@@ -53,7 +54,7 @@ void load_ca_cert_and_key(pakeproxy_ca_t *ca,
 }
 
 int create_x509_for_host_and_user(gnutls_session_t session,
-                                  pakeproxy_ca_t* ca,
+                                  pp_ca_t* ca,
                                   gnutls_x509_crt_t* crt,
                                   gnutls_x509_privkey_t* key) {
   int ret;
@@ -127,13 +128,13 @@ static char* make_fake_common_name(gnutls_session_t session) {
   int ret;
   char *user;
   char *common_name_buf;
-  pakeproxy_session_t *ppsession;
+  pp_session_t *ppsession;
   static const int kCommonNameBufferSize = 1000;
 
   user = "sqs";
   ppsession = gnutls_session_get_ptr(session);
 
-  if (ppsession->proxy_stream->connect_host == NULL) {
+  if (ppsession->target_host == NULL) {
     char server_name[SERVER_NAME_BUFFER_SIZE];
     size_t server_name_size = SERVER_NAME_BUFFER_SIZE;
     unsigned int server_name_type;
@@ -148,7 +149,7 @@ static char* make_fake_common_name(gnutls_session_t session) {
     errx(1, "malloc kCommonNameBufferSize");
 
   snprintf(common_name_buf, kCommonNameBufferSize,
-           "%s@%s (SRP)", user, ppsession->proxy_stream->connect_host);
+           "%s@%s (SRP)", user, ppsession->target_host);
   return common_name_buf;
 }
 
