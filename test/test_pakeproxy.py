@@ -1,6 +1,7 @@
 from subprocess import Popen, PIPE, STDOUT, check_output
 from unittest import TestCase
 from contextlib import contextmanager
+import threading
 import urllib2, os, re
 #from ProxyHTTPConnection import ConnectHTTPSHandler
 
@@ -51,18 +52,45 @@ class WgetResponse(object):
         issuer = self.issuer_re.search(self.raw).groups(0)[0]
         return {'subject': subject, 'issuer': issuer}
 
+
+class ProxyURLOpenThread(threading.Thread):
+    def __init__(self, pakeproxy, url, test):
+        threading.Thread.__init__(self)
+        self.pakeproxy = pakeproxy
+        self.url = url
+        self.test = test
+
+    def run(self):
+        res = proxy_urlopen(self.pakeproxy, self.url)
+        TestPAKEProxy.check_response(self.test, res)
+    
 class TestPAKEProxy(TestCase):
+    url = 'https://tls-srp.test.trustedhttp.org'
+    
+    def check_response(self, res):
+        self.assertIn('user is: user', res.read())
+        certinfo = res.certinfo()
+        self.assertEquals('sqs@tls-srp.test.trustedhttp.org (SRP)',
+                          certinfo['subject'])
+        self.assertEquals('PAKEProxy CA Certificate',
+                          certinfo['issuer'])
+
     def test_simple(self):
         with pakeproxy() as pp:
-            res = proxy_urlopen(pp, 'https://tls-srp.test.trustedhttp.org')
-            self.assertIn('user is: user', res.read())
-            certinfo = res.certinfo()
-            self.assertEquals('sqs@tls-srp.test.trustedhttp.org (SRP)',
-                              certinfo['subject'])
-            self.assertEquals('PAKEProxy CA Certificate',
-                              certinfo['issuer'])
+            res = proxy_urlopen(pp, self.url)
+            self.check_response(res)
 
-            
+    def test_concurrent(self):
+        with pakeproxy() as pp:
+            threads = []
+            for i in range(5):
+                c = ProxyURLOpenThread(pp, self.url, self)
+                c.start()
+                threads.append(c)
+            for t in threads:
+                t.join()
+                  
+        
             
     
     
