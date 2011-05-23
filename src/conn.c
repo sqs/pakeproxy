@@ -17,6 +17,7 @@
 #include <gnutls/x509.h>
 
 #include "pakeproxy.h"
+#include "misc.h"
 
 #define MAX_BUFFER_SIZE 4096
 #define RECORD_BUFFER_SIZE MAX_BUFFER_SIZE
@@ -83,7 +84,6 @@ static int do_http_connect(int sd, char** host, int* port) {
   char *cur = buf;
   ssize_t len;
   ssize_t total_len = 0;
-  int i;
 
   for (;;) {
     len = recv(sd, cur, sizeof(buf) - (cur - buf), 0);
@@ -100,13 +100,7 @@ static int do_http_connect(int sd, char** host, int* port) {
   
   if (strncmp(buf, "CONNECT ", strlen("CONNECT ")) == 0) {
     *host = buf + strlen("CONNECT ");
-    for (i = 0; i < total_len; i++) {
-      if ((*host)[i] == ':') {
-        (*host)[i] = '\0';
-        *port = atoi(&(*host)[i+1]);
-        break;
-      }
-    }
+    parse_hostport(*host, host, port);
     *host = strdup(*host);
     fprintf(stderr, "- Client requested HTTP CONNECT %s:%d\n", *host, *port);
 
