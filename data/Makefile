@@ -1,5 +1,6 @@
 PRODUCTS=ca-key.pem ca-cert.pem
 DEBUG=
+CERTTOOL=/usr/bin/certtool
 
 default: $(PRODUCTS)
 
@@ -8,8 +9,8 @@ clean:
 
 ca-key.pem:
 	echo generating CA key
-	certtool --generate-privkey --bits 1024 --outfile $@
+	$(CERTTOOL) --generate-privkey --bits 2048 --outfile $@
 
 ca-cert.pem:
 	echo generating CA signing cert
-	certtool --load-privkey ca-key.pem --template ca-cert.cfg --generate-self-signed --outfile $@
+	$(CERTTOOL) --load-privkey ca-key.pem --template ca-cert.cfg --generate-self-signed --outfile $@
