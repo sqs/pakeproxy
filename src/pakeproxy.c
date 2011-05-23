@@ -12,6 +12,7 @@
 #include <string.h>
 #include <unistd.h>
 #include <ctype.h>
+#include <pthread.h>
 
 #include <gnutls/gnutls.h>
 #include <gnutls/extra.h>
@@ -38,9 +39,8 @@ static void set_target_hostport(gnutls_session_t session, pp_session_t* ppsessio
 static void init_gnutls();
 static int open_listen_socket(const char *host, int port);
 static struct in_addr get_listen_addr(const char *listen_host);
-static int do_accept(int listen_sd,
-                     gnutls_session_t *session,
-                     pp_config_t *cfg);
+static int do_accept(int listen_sd);
+static void* connection_thread(void* arg);
 
 static int retrieve_server_cert(gnutls_session_t session,
                                 const gnutls_datum_t* req_ca_dn,
@@ -156,10 +156,9 @@ err:
 
 int main(int argc, char **argv) {
   int listen_sd;
-  int ret;
+  int sd;
   int c;
-  pid_t pid;
-  gnutls_session_t session;
+  pthread_t thread_id;
 
   cfg.listen_host = "127.0.0.1";
   cfg.listen_port = 8443;
@@ -188,39 +187,15 @@ int main(int argc, char **argv) {
 
   init_gnutls(&cfg);
   load_ca_cert_and_key(&global_ca, cfg.ca_cert_file, cfg.ca_key_file);
+  srand(time(NULL));
 
   listen_sd = open_listen_socket(cfg.listen_host, cfg.listen_port);
   if (listen_sd == -1)
     exit(1);
 
   for (;;) {
-    ret = do_accept(listen_sd, &session, &cfg);
-    if (ret != GNUTLS_E_SUCCESS)
-      break;
-
-    pid = fork();
-    if (pid == -1) {
-      perror("fork");
-      exit(1);
-    } else if (pid != 0) {
-      /* in parent */
-      fprintf(stderr, "- Forked child %d\n", pid);
-      continue;
-    }
-
-    srand(time(NULL) + 10000*getpid());
-    
-    ret = do_proxy(session, cfg.proxy_type);
-    if (ret != GNUTLS_E_SUCCESS)
-      break;
-
-    gnutls_bye(session, GNUTLS_SHUT_WR);
-    close((int)(long)gnutls_transport_get_ptr(session));
-    gnutls_deinit(session);
-
-    if (pid == 0) {
-      fprintf(stderr, "- Exiting child %d\n", getpid());
-    }
+    sd = do_accept(listen_sd);
+    pthread_create(&thread_id, NULL, connection_thread, (void*)sd);
   }
 
   close(listen_sd);
@@ -294,34 +269,43 @@ static struct in_addr get_listen_addr(const char *listen_host) {
   return *((struct in_addr *)hp->h_addr_list[0]);
 }
 
-static int do_accept(int listen_sd,
-                     gnutls_session_t *session,
-                     pp_config_t *cfg) {
+static int do_accept(int listen_sd) {
   struct sockaddr_in sa_cli;
   socklen_t client_len = sizeof(sa_cli);
   char topbuf[512];
-  pp_session_t *ppsession;
   int sd;
-  int ret;
 
   sd = accept(listen_sd, (struct sockaddr *)&sa_cli, &client_len);
   fprintf(stderr, "- Connection from %s:%d\n",
           inet_ntop(AF_INET, &sa_cli.sin_addr, topbuf,
                     sizeof(topbuf)), ntohs(sa_cli.sin_port));
+  return sd;
+}
 
-  ret = initialize_tls_session(session);
+static void* connection_thread(void* arg) {
+  int sd;
+  gnutls_session_t session;
+  pp_session_t ppsession;
+  int ret;
+
+  sd = (int)arg;
+
+  ret = initialize_tls_session(&session);
   if (ret != GNUTLS_E_SUCCESS) {
     fprintf(stderr, "Error initializing TLS session\n");
     return ret;
   }
-  gnutls_transport_set_ptr(*session, (gnutls_transport_ptr_t)(long)sd);
+  gnutls_transport_set_ptr(session, (gnutls_transport_ptr_t)(long)sd);
 
-  ppsession = malloc(sizeof(pp_session_t));
-  if (ppsession == NULL)
-    err(1, "malloc pakeproxy_session_t");
-  memset(ppsession, '\0', sizeof(pp_session_t));
-  ppsession->cfg = cfg;
-  gnutls_session_set_ptr(*session, ppsession);
+  ppsession.cfg = &cfg;
+  gnutls_session_set_ptr(session, &ppsession);
 
-  return GNUTLS_E_SUCCESS;
+  ret = do_proxy(session, cfg.proxy_type);
+  if (ret != GNUTLS_E_SUCCESS)
+    err(1, "do_proxy");
+
+  close((int)(long)gnutls_transport_get_ptr(session));
+  gnutls_deinit(session);
+
+  return 0;
 }

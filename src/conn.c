@@ -18,6 +18,7 @@
 
 #include "pakeproxy.h"
 #include "misc.h"
+#include "accounts.h"
 
 #define MAX_BUFFER_SIZE 4096
 #define RECORD_BUFFER_SIZE MAX_BUFFER_SIZE
@@ -122,28 +123,29 @@ static int do_connect_target(gnutls_session_t* session,
   int ret;
   int sd;
 
-  gnutls_srp_allocate_client_credentials(&srp_cred);
-  gnutls_certificate_allocate_credentials(&cert_cred);
-  gnutls_certificate_set_x509_trust_file(cert_cred, ppsession->cfg->ca_cert_file,
-                                         GNUTLS_X509_FMT_PEM);
-  gnutls_srp_set_client_credentials_function(srp_cred, srp_cred_callback);
-
   sd = tcp_connect(ppsession->target_host,
                    ppsession->target_port);
 
   gnutls_init(session, GNUTLS_CLIENT);
   gnutls_transport_set_ptr(*session, (gnutls_transport_ptr_t)(long)sd);
 
-  gnutls_priority_set_direct(*session, "NONE:+AES-256-CBC:+AES-128-CBC:+SRP:+SHA1:+COMP-NULL:+VERS-TLS1.1:+VERS-TLS1.0", NULL);
-
-  ret = gnutls_credentials_set(*session, GNUTLS_CRD_SRP, srp_cred);
-  if (ret != GNUTLS_E_SUCCESS)
-    errx(1, "gnutls_credentials_set SRP: %s", gnutls_strerror(ret));
-    
+  gnutls_certificate_allocate_credentials(&cert_cred);
+  gnutls_certificate_set_x509_trust_file(cert_cred, ppsession->cfg->ca_cert_file,
+                                         GNUTLS_X509_FMT_PEM);
   ret = gnutls_credentials_set(*session, GNUTLS_CRD_CERTIFICATE, cert_cred);
   if (ret != GNUTLS_E_SUCCESS)
     errx(1, "gnutls_credentials_set CRT: %s", gnutls_strerror(ret));
 
+  if (site_uses_tls_login(ppsession->target_host)) {
+    gnutls_priority_set_direct(*session, "NONE:+AES-256-CBC:+AES-128-CBC:+SRP:+SHA1:+COMP-NULL:+VERS-TLS1.1:+VERS-TLS1.0", NULL);
+    gnutls_srp_allocate_client_credentials(&srp_cred);
+    gnutls_srp_set_client_credentials_function(srp_cred, srp_cred_callback);
+    ret = gnutls_credentials_set(*session, GNUTLS_CRD_SRP, srp_cred);
+    if (ret != GNUTLS_E_SUCCESS)
+      errx(1, "gnutls_credentials_set SRP: %s", gnutls_strerror(ret));
+  } else {
+    gnutls_priority_set_direct(*session, "NORMAL", NULL);
+  }
 
   gnutls_server_name_set(*session, GNUTLS_NAME_DNS,
                          ppsession->target_host,
@@ -201,8 +203,10 @@ int tcp_connect(char* host, int port) {
 static int do_tunnel(gnutls_session_t session_client,
                      gnutls_session_t session_target) {
   int ret;
+  int tmpret;
   int sd_client;
   int sd_target;
+  int client_closed = 0, target_closed = 0;
   fd_set rfds;
   int nfds;
   char buffer[RECORD_BUFFER_SIZE+1];
@@ -224,40 +228,72 @@ static int do_tunnel(gnutls_session_t session_client,
     }
 
     if (ret == -1) {
-      errx(1, "select()");
+      err(1, "select()");
     }
       
-    /* SEND FROM CLIENT TO HOST */
+    /* SEND FROM CLIENT TO TARGET */
     memset(buffer, 0, sizeof(buffer));
-    if (FD_ISSET(sd_client, &rfds)) {
+    if (!client_closed && FD_ISSET(sd_client, &rfds)) {
       ret = gnutls_record_recv(session_client, buffer, RECORD_BUFFER_SIZE);
       if (ret == 0) {
+        client_closed = 1;
         printf("- Client has closed the GnuTLS connection\n");
         break;
       } else if (ret < 0) {
-        fprintf(stderr, "- Received corrupted "
-                "data(%d) from client. Closing the connection.\n", ret);
+        client_closed = 1;
+        fprintf(stderr, "- Client sent corrupted data: %s\n", gnutls_strerror(ret));
         break;
       } else if (ret > 0) {
-        gnutls_record_send(session_target, buffer, strlen(buffer));
+        tmpret = ret;
+        ret = gnutls_record_send(session_target, buffer, tmpret);
+        if (ret < 0) {
+          fprintf(stderr, "- !!! Error sending to target: %s\n",
+                  gnutls_strerror(ret));
+        }
       }
     }
 
-    /* SEND FROM HOST TO CLIENT */
+    /* SEND FROM TARGET TO CLIENT */
     memset(buffer, 0, sizeof(buffer));
-    if (FD_ISSET(sd_target, &rfds)) {
+    if (!target_closed && FD_ISSET(sd_target, &rfds)) {
       ret = gnutls_record_recv(session_target, buffer, RECORD_BUFFER_SIZE);
       if (ret == 0) {
+        target_closed = 1;
         printf("- Target has closed the GnuTLS connection\n");
         break;
       } else if (ret < 0) {
-        fprintf(stderr, "\n- Received corrupted "
-                "data(%d) from target. Closing the connection.\n", ret);
+        target_closed = 1;
+        fprintf(stderr, "- Target sent corrupted data: %s\n", gnutls_strerror(ret));
         break;
       } else if (ret > 0) {
-        gnutls_record_send(session_client, buffer, strlen(buffer));
+        tmpret = ret;
+        ret = gnutls_record_send(session_client, buffer, tmpret);
+        if (ret < 0) {
+          fprintf(stderr, "- !!! Error sending to client: %s\n",
+                  gnutls_strerror(ret));
+        }
       }
     }      
+  }
+
+  if (!client_closed) {
+    ret = gnutls_bye(session_client, GNUTLS_SHUT_WR);
+    if (ret != GNUTLS_E_SUCCESS)
+      fprintf(stderr, "- !!! Error in gnutls_bye to client: %s\n",
+              gnutls_strerror(ret));
+    ret = close(sd_client);
+    if (ret == -1)
+      warn("- !!! Error closing client sd");
+  }
+
+  if (!target_closed) {
+    ret = gnutls_bye(session_target, GNUTLS_SHUT_WR);
+    if (ret != GNUTLS_E_SUCCESS)
+      fprintf(stderr, "- !!! Error in gnutls_bye to target: %s\n",
+              gnutls_strerror(ret));
+    ret = close(sd_target);
+    if (ret == -1)
+      warn("- !!! Error closing target sd");
   }
 
   return GNUTLS_E_SUCCESS;
