@@ -11,11 +11,32 @@
 
 #define SERVER_NAME_BUFFER_SIZE 1024
 #define X509_DISPLAY_NAME_BUFFER_SIZE 1024
+#define SERIAL_BUFFER_SIZE 1024
+#define CERT_CACHE_PATH "data/tmp/"
+#define CRT_EXT "crt"
+#define KEY_EXT "key"
+
+/* TODO(sqs): parameterize */
+#define SRPUSER "sqs"
 
 static gnutls_datum_t load_file(const char *file);
 static void unload_file(gnutls_datum_t data);
-static char* get_display_name(gnutls_session_t session);
+static void save_datum(gnutls_datum_t data, const char* file);
+static char* get_display_name(char* server_name, char* username);
 static gnutls_x509_privkey_t generate_private_key_int();
+static int find_x509_crt(char* server_name,
+                         char* username,
+                         gnutls_x509_crt_t* crt,
+                         gnutls_x509_privkey_t* key);
+static int create_x509_crt(char* server_name,
+                           char* username,
+                           pp_ca_t* ca,
+                           gnutls_x509_crt_t* crt,
+                           gnutls_x509_privkey_t* key);
+static void save_x509(char* server_name,
+                      char* username,
+                      gnutls_x509_crt_t crt,
+                      gnutls_x509_privkey_t key);
 
 void load_ca_cert_and_key(pp_ca_t* ca,
                           const char* ca_cert_file,
@@ -54,14 +75,103 @@ void load_ca_cert_and_key(pp_ca_t* ca,
   unload_file(data);
 }
 
-int create_x509_for_host_and_user(gnutls_session_t session,
-                                  pp_ca_t* ca,
-                                  gnutls_x509_crt_t* crt,
-                                  gnutls_x509_privkey_t* key) {
+int get_x509_crt(gnutls_session_t session,
+                 pp_ca_t* ca,
+                 gnutls_x509_crt_t* crt,
+                 gnutls_x509_privkey_t* key) {
+  pp_session_t* ppsession;
+  char* server_name;
+  char* username;
   int ret;
-  char *common_name;
+
+  ppsession = gnutls_session_get_ptr(session);
+  server_name = ppsession->target_host;
+  username = SRPUSER;
+
+  ret = find_x509_crt(server_name, username, crt, key);
+  if (ret != GNUTLS_E_SUCCESS) {
+    ret = create_x509_crt(server_name, username, ca, crt, key);
+    if (ret != GNUTLS_E_SUCCESS) {
+      errx(ret, "get_x509_crt: failed to create: %s", gnutls_strerror(ret));
+    }
+  }
+
+  return GNUTLS_E_SUCCESS;
+}
+
+static char* filename_for_x509(char* server_name,
+                               char* username,
+                               const char* ext) {
+  char *filename;
+  size_t len;
+
+  len = strlen(CERT_CACHE_PATH) + strlen(server_name)
+        + 1 + strlen(username) + 1 + strlen(ext) + 1;
+  filename = malloc(len);
+  if (filename == NULL)
+    err(1, "malloc filename");
+
+  snprintf(filename, len, "%s%s_%s.%s",
+           CERT_CACHE_PATH, server_name, username, ext);
+  return filename;  
+}
+
+static int find_x509_crt(char* server_name,
+                         char* username,
+                         gnutls_x509_crt_t* crt,
+                         gnutls_x509_privkey_t* key) {
+  int ret;
+  char* crtfile;
+  char* keyfile;
+  gnutls_datum_t crtdata;
+  gnutls_datum_t keydata;
+
+  crtfile = filename_for_x509(server_name, username, CRT_EXT);
+  keyfile = filename_for_x509(server_name, username, KEY_EXT);
+
+  crtdata = load_file(crtfile);
+  keydata = load_file(keyfile);
+
+  if (crtdata.data == NULL || keydata.data == NULL) {
+    ret = GNUTLS_E_FILE_ERROR;
+    goto done;
+  }
+
+  ret = gnutls_x509_crt_init(crt);
+  if (ret != GNUTLS_E_SUCCESS)
+    errx(ret, "gnutls_x509_crt_init: %s", gnutls_strerror(ret));
+
+  ret = gnutls_x509_crt_import(*crt, &crtdata, GNUTLS_X509_FMT_PEM);
+  if (ret != GNUTLS_E_SUCCESS)
+    errx(ret, "gnutls_x509_crt_import: %s", gnutls_strerror(ret));
+
+  ret = gnutls_x509_privkey_init(key);
+  if (ret != GNUTLS_E_SUCCESS)
+    errx(ret, "gnutls_x509_privkey_init: %s", gnutls_strerror(ret));
+
+  ret = gnutls_x509_privkey_import(*key, &keydata, GNUTLS_X509_FMT_PEM);
+  if (ret != GNUTLS_E_SUCCESS)
+    errx(ret, "gnutls_x509_privkey_import: %s", gnutls_strerror(ret));
+
+  unload_file(crtdata);
+  unload_file(keydata);
+  ret = GNUTLS_E_SUCCESS;
+
+done:
+  free(crtfile);
+  free(keyfile);
+  return ret;
+}
+
+static int create_x509_crt(char* server_name,
+                           char* username,
+                           pp_ca_t* ca,
+                           gnutls_x509_crt_t* crt,
+                           gnutls_x509_privkey_t* key) {
+  int ret;
   char *display_name;
-  pp_session_t *ppsession;
+
+  fprintf(stderr, "- Generating X509 pair for %s@%s\n", username, server_name);
 
   *key = generate_private_key_int();
 
@@ -69,14 +179,12 @@ int create_x509_for_host_and_user(gnutls_session_t session,
   if (ret < 0)
     errx(ret, "gnutls_x509_crt_init: %s", gnutls_strerror(ret));
 
-  ppsession = gnutls_session_get_ptr(session);
-  common_name = ppsession->target_host;  
   ret = gnutls_x509_crt_set_dn_by_oid(*crt, GNUTLS_OID_X520_COMMON_NAME, 0,
-                                      common_name, strlen(common_name));
+                                      server_name, strlen(server_name));
   if (ret < 0)
     errx(ret, "gnutls_x509_crt_set_dn_by_oid common name: %s", gnutls_strerror(ret));
 
-  display_name = get_display_name(session);
+  display_name = get_display_name(server_name, username);
   ret = gnutls_x509_crt_set_dn_by_oid(*crt, GNUTLS_OID_X520_ORGANIZATION_NAME, 0,
                                       display_name, strlen(display_name));
   if (ret < 0)
@@ -88,13 +196,13 @@ int create_x509_for_host_and_user(gnutls_session_t session,
 
   gnutls_x509_crt_set_version(*crt, 1);
   
-  srand(time(NULL));
   int crt_serial = rand();
+  printf("CRT SERIAL = %d\n", crt_serial);
   gnutls_x509_crt_set_serial(*crt, &crt_serial, sizeof(int));
 
   gnutls_x509_crt_set_activation_time(*crt, time(NULL));
   /* 10 days */
-  ret = gnutls_x509_crt_set_expiration_time(*crt, time(NULL) + 10*24*60*60);
+  ret = gnutls_x509_crt_set_expiration_time(*crt, time(NULL) + 1000*24*60*60);
   if (ret < 0)
     errx(ret, "gnutls_x509_crt_set_expiration_time: %s", gnutls_strerror(ret));
 
@@ -111,7 +219,47 @@ int create_x509_for_host_and_user(gnutls_session_t session,
   if (ret < 0)
     errx(ret, "gnutls_x509_crt_sign2: %s", gnutls_strerror(ret));
 
+  save_x509(server_name, username, *crt, *key);
+
   return 0;
+}
+
+static void save_x509(char* server_name,
+                      char* username,
+                      gnutls_x509_crt_t crt,
+                      gnutls_x509_privkey_t key) {
+  int ret;
+  char* crtfile;
+  char* keyfile;
+  gnutls_datum_t crtdata;
+  gnutls_datum_t keydata;
+
+  crtfile = filename_for_x509(server_name, username, CRT_EXT);
+  keyfile = filename_for_x509(server_name, username, KEY_EXT);
+
+  gnutls_x509_crt_export(crt, GNUTLS_X509_FMT_PEM,
+                         NULL, (size_t*)&crtdata.size);
+  crtdata.data = malloc(crtdata.size);
+  ret = gnutls_x509_crt_export(crt, GNUTLS_X509_FMT_PEM,
+                               crtdata.data, (size_t*)&crtdata.size);
+  if (ret != GNUTLS_E_SUCCESS)
+    errx(ret, "gnutls_x509_crt_export: %s", gnutls_strerror(ret));
+
+  ret = gnutls_x509_privkey_export(key, GNUTLS_X509_FMT_PEM,
+                                   NULL, (size_t*)&keydata.size);
+  keydata.data = malloc(keydata.size);
+  ret = gnutls_x509_privkey_export(key, GNUTLS_X509_FMT_PEM,
+                                   keydata.data, (size_t*)&keydata.size);
+  if (ret != GNUTLS_E_SUCCESS)
+    errx(ret, "gnutls_x509_privkey_export: %s", gnutls_strerror(ret));
+
+  save_datum(crtdata, crtfile);
+  save_datum(keydata, keyfile);
+
+  free(crtdata.data);
+  free(keydata.data);
+  free(crtfile);
+  free(keyfile);
 }
 
 static gnutls_x509_privkey_t generate_private_key_int() {
@@ -136,20 +284,14 @@ static gnutls_x509_privkey_t generate_private_key_int() {
   return key;
 }
 
-static char* get_display_name(gnutls_session_t session) {
-  char *user;
+static char* get_display_name(char* server_name, char* username) {
   char *buf;
-  pp_session_t *ppsession;
-
-  user = "sqs";
-  ppsession = gnutls_session_get_ptr(session);
-
-  buf = malloc(X509_DISPLAY_NAME_BUFFER_SIZE);
+  size_t len;
+  len = strlen(server_name) + strlen("@") + strlen(username) + strlen(" (SRP)");
+  buf = malloc(len);
   if (buf == NULL)
     errx(1, "malloc get_display_name buf");
-
-  snprintf(buf, X509_DISPLAY_NAME_BUFFER_SIZE,
-           "%s@%s (SRP)", user, ppsession->target_host);
+  snprintf(buf, len, "%s@%s (SRP)", username, server_name);
   return buf;
 }
 
@@ -180,3 +322,19 @@ static void unload_file(gnutls_datum_t data) {
   free(data.data);
 }
 
+static void save_datum(gnutls_datum_t data, const char* file) {
+  FILE *f;
+  int ret;
+
+  f = fopen(file, "w");
+  if (f == NULL)
+    err(1, "fopen in save_datum ('%s')", file);
+
+  ret = fwrite(data.data, data.size, 1, f);
+  if (ret != 1)
+    err(1, "fwrite(...) != 1");
+
+  ret = fclose(f);
+  if (ret != 0)
+    err(1, "fclose");
+}

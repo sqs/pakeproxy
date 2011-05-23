@@ -50,7 +50,7 @@ static int retrieve_server_cert(gnutls_session_t session,
   if (crt == NULL)
     errx(1, "malloc gnutls_x509_crt_t");
 
-  create_x509_for_host_and_user(session, &global_ca, crt, &key);
+  get_x509_crt(session, &global_ca, crt, &key);
 
   st->cert_type = GNUTLS_CRT_X509;
   st->key_type = GNUTLS_PRIVKEY_X509;
@@ -147,6 +147,8 @@ int main(int argc, char **argv) {
       fprintf(stderr, "- Forked child %d\n", pid);
       continue;
     }
+
+    srand(time(NULL) + 10000*getpid());
     
     ret = do_https_tunnel(session);
     if (ret != GNUTLS_E_SUCCESS)
