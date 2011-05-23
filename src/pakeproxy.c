@@ -148,10 +148,12 @@ static int initialize_tls_session(gnutls_session_t *session) {
     goto err;
   }
 
-  ret = session_init_cache(*session);
-  if (ret != GNUTLS_E_SUCCESS) {
-    fprintf(stderr, "session_init_cache: %s", gnutls_strerror(ret));
-    goto err;
+  if (cfg.session_cache) {
+    ret = session_init_cache(*session);
+    if (ret != GNUTLS_E_SUCCESS) {
+      fprintf(stderr, "session_init_cache: %s", gnutls_strerror(ret));
+      goto err;
+    }
   }
 
 err:
