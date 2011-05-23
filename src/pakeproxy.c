@@ -254,7 +254,7 @@ static int open_listen_socket(const char *host, int port) {
   listen_sd = socket(AF_INET, SOCK_STREAM, 0);
   if (listen_sd == -1) {
     perror("socket");
-    return 1;
+    return -1;
   }
 
   memset(&sa_serv, '\0', sizeof(sa_serv));
@@ -268,13 +268,13 @@ static int open_listen_socket(const char *host, int port) {
   ret = bind(listen_sd, (struct sockaddr *)&sa_serv, sizeof(sa_serv));
   if (ret == -1) {
     perror("bind");
-    return 1;
+    return -1;
   }
   
   ret = listen(listen_sd, 1024);
   if (ret == -1) {
     perror("listen");
-    return 1;
+    return -1;
   }
 
   fprintf(stderr, "Listening on %s:%d\n", host, port);
