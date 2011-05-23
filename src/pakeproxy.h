@@ -15,6 +15,7 @@ typedef struct {
   const char *ca_key_file;
   const char *client_priority;
   pp_proxy_type_t proxy_type;
+  int session_cache;
 } pp_config_t;
 
 typedef struct {

@@ -22,6 +22,7 @@
 #include "cert.h"
 #include "conn.h"
 #include "misc.h"
+#include "cache.h"
 
 #define DEFAULT_CA_CERT_FILE "/home/sqs/src/pakeproxy/data/ca-cert.pem"
 #define DEFAULT_CA_KEY_FILE "/home/sqs/src/pakeproxy/data/ca-key.pem"
@@ -147,6 +148,12 @@ static int initialize_tls_session(gnutls_session_t *session) {
     goto err;
   }
 
+  ret = session_init_cache(*session);
+  if (ret != GNUTLS_E_SUCCESS) {
+    fprintf(stderr, "session_init_cache: %s", gnutls_strerror(ret));
+    goto err;
+  }
+
 err:
   if (*session && ret != GNUTLS_E_SUCCESS)
     gnutls_deinit(*session);
@@ -165,11 +172,15 @@ int main(int argc, char **argv) {
   cfg.ca_key_file = DEFAULT_CA_KEY_FILE;
   cfg.client_priority = DEFAULT_CLIENT_PRIORITY;
   cfg.proxy_type = PP_PLAIN_PROXY;
+  cfg.session_cache = 0;
 
-  while ((c = getopt(argc, argv, "t")) != -1) {
+  while ((c = getopt(argc, argv, "ts")) != -1) {
     switch (c) {
       case 't':
         cfg.proxy_type = PP_HTTPS_TUNNEL;
+        break;
+      case 's':
+        cfg.session_cache = 1;
         break;
       case '?':
         if (isprint(optopt))
@@ -199,6 +210,7 @@ int main(int argc, char **argv) {
 
   close(listen_sd);
   gnutls_priority_deinit(priority_cache);
+  global_deinit_cache();
   gnutls_global_deinit();
 
   return 0;
@@ -218,6 +230,12 @@ static void init_gnutls(pp_config_t *cfg) {
   ret = gnutls_priority_init(&priority_cache, cfg->client_priority, NULL);
   if (ret != GNUTLS_E_SUCCESS)
     errx(ret, "gnutls_priority_init: %s", gnutls_strerror(ret));
+
+  if (cfg->session_cache) {
+    ret = global_init_cache();
+    if (ret != GNUTLS_E_SUCCESS)
+      errx(ret, "global_init_cache: %s", gnutls_strerror(ret));
+  }
 }
 
 static int open_listen_socket(const char *host, int port) {
