@@ -287,7 +287,7 @@ static gnutls_x509_privkey_t generate_private_key_int() {
 static char* get_display_name(char* server_name, char* username) {
   char *buf;
   size_t len;
-  len = strlen(server_name) + strlen("@") + strlen(username) + strlen(" (SRP)");
+  len = strlen(server_name) + strlen("@") + strlen(username) + strlen(" (SRP)") + 1;
   buf = malloc(len);
   if (buf == NULL)
     errx(1, "malloc get_display_name buf");
