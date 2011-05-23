@@ -103,7 +103,6 @@ static void set_target_hostport(gnutls_session_t session, pp_session_t* ppsessio
 
   parse_hostport(server_name, &ppsession->target_host,
                  &ppsession->target_port);
-  printf("server_name = '%s'\n", server_name);
 }
 
 static int initialize_tls_session(gnutls_session_t *session) {
