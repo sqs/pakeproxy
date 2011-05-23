@@ -218,8 +218,9 @@ int main(int argc, char **argv) {
     close((int)(long)gnutls_transport_get_ptr(session));
     gnutls_deinit(session);
 
-    if (pid == 0)
-      break;
+    if (pid == 0) {
+      fprintf(stderr, "- Exiting child %d\n", getpid());
+    }
   }
 
   close(listen_sd);
