@@ -37,6 +37,7 @@ static int srp_cred_callback(gnutls_session_t session,
 static int tcp_connect(char* host, int port);
 static int do_tunnel(gnutls_session_t session_client,
                      gnutls_session_t session_target);
+static int do_passthru(gnutls_session_t session_client);
 
 int do_proxy(gnutls_session_t session_client, pp_proxy_type_t proxy_type) {
   int ret;
@@ -56,22 +57,30 @@ int do_proxy(gnutls_session_t session_client, pp_proxy_type_t proxy_type) {
     }
   }
 
-  ret = gnutls_handshake(session_client);
-  if (ret != GNUTLS_E_SUCCESS) {
-    fprintf(stderr, "Client handshake failed: %s\n", gnutls_strerror(ret));
-    goto err;
-  }
+  if (site_uses_tls_login(ppsession->target_host)) {
+    ret = gnutls_handshake(session_client);
+    if (ret != GNUTLS_E_SUCCESS) {
+      fprintf(stderr, "Client handshake failed: %s\n", gnutls_strerror(ret));
+      goto err;
+    }
 
-  ret = do_connect_target(&session_target, ppsession);
-  if (ret != GNUTLS_E_SUCCESS) {
-    fprintf(stderr, "Connect to target failed: %s\n", gnutls_strerror(ret));
-    goto err;
-  }
+    ret = do_connect_target(&session_target, ppsession);
+    if (ret != GNUTLS_E_SUCCESS) {
+      fprintf(stderr, "Connect to target failed: %s\n", gnutls_strerror(ret));
+      goto err;
+    }
 
-  ret = do_tunnel(session_client, session_target);
-  if (ret != GNUTLS_E_SUCCESS) {
-    fprintf(stderr, "Tunneling failed: %s\n", gnutls_strerror(ret));
-    goto err;
+    ret = do_tunnel(session_client, session_target);
+    if (ret != GNUTLS_E_SUCCESS) {
+      fprintf(stderr, "Tunneling failed: %s\n", gnutls_strerror(ret));
+      goto err;
+    }
+  } else {
+    ret = do_passthru(session_client);
+    if (ret != GNUTLS_E_SUCCESS) {
+      fprintf(stderr, "Passthru failed: %s\n", gnutls_strerror(ret));
+      goto err;
+    }
   }
   
   ret = GNUTLS_E_SUCCESS;
@@ -297,4 +306,87 @@ static int do_tunnel(gnutls_session_t session_client,
   }
 
   return GNUTLS_E_SUCCESS;
+}
+
+static int do_passthru(gnutls_session_t session_client) {
+  int ret;
+  int sd_client;
+  int sd_target;
+  pp_session_t* ppsession;
+  int client_closed = 0, target_closed = 0;
+  fd_set rfds;
+  int nfds;
+  char buffer[RECORD_BUFFER_SIZE+1];
+
+  sd_client = (int)(long)gnutls_transport_get_ptr(session_client);
+
+  ppsession = gnutls_session_get_ptr(session_client);
+  sd_target = tcp_connect(ppsession->target_host, ppsession->target_port);
+
+  for (;;) {
+    FD_ZERO(&rfds);
+    FD_SET(sd_client, &rfds);
+    FD_SET(sd_target, &rfds);
+    nfds = (sd_client > sd_target ? sd_client : sd_target);
+
+    ret = select(nfds+1, &rfds, NULL, NULL, NULL);
+
+    if (ret == -1 && errno == EINTR) {
+      warnx("select interrupted\n");
+      continue;
+    }
+
+    if (ret == -1) {
+      err(1, "select()");
+    }
+
+    /* SEND FROM CLIENT TO TARGET */
+    memset(buffer, 0, sizeof(buffer));
+    if (FD_ISSET(sd_client, &rfds)) {
+      ret = recv(sd_client, buffer, RECORD_BUFFER_SIZE, 0);
+      if (ret == 0) {
+        client_closed = 1;
+        fprintf(stderr, "- Client has closed the passthru connection\n");
+        break;
+      } else if (ret == -1) {
+        err(1, "passthru read from client");
+      } else if (ret > 0) {
+        ret = send(sd_target, buffer, ret, 0);
+        if (ret == -1)
+          err(1, "passthru send to target");
+      }
+    }
+
+    /* SEND FROM TARGET TO CLIENT */
+    memset(buffer, 0, sizeof(buffer));
+    if (FD_ISSET(sd_target, &rfds)) {
+      ret = recv(sd_target, buffer, RECORD_BUFFER_SIZE, 0);
+      if (ret == 0) {
+        target_closed = 1;
+        fprintf(stderr, "- Target has closed the passthru connection\n");
+        break;
+      } else if (ret == -1) {
+        err(1, "passthru read from target");
+      } else if (ret > 0) {
+        ret = send(sd_client, buffer, ret, 0);
+        if (ret == -1)
+          err(1, "passthru send to client");
+      }
+    }
+  }
+
+  if (!client_closed) {
+    ret = close(sd_client);
+    if (ret == -1)
+      warn("- !!! Error closing client sd");
+  }
+
+  if (!target_closed) {
+    ret = close(sd_target);
+    if (ret == -1)
+      warn("- !!! Error closing target sd");
+  }
+
+  return GNUTLS_E_SUCCESS;
+
 }

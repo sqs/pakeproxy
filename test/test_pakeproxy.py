@@ -45,7 +45,7 @@ class WgetResponse(object):
     def read(self):
         return self.raw
 
-    subject_re = re.compile(r'subject:\s*/CN=(.*)')
+    subject_re = re.compile(r'subject:\s*(.*)')
     issuer_re = re.compile(r'issuer:\s*/CN=(.*)')
     def certinfo(self):
         subject = self.subject_re.search(self.raw).groups(0)[0]
@@ -66,14 +66,22 @@ class ProxyURLOpenThread(threading.Thread):
     
 class TestPAKEProxy(TestCase):
     url = 'https://tls-srp.test.trustedhttp.org'
+    non_tls_login_url = 'https://test.gnutls.org:5556'
     
     def check_response(self, res):
         self.assertIn('user is: user', res.read())
         certinfo = res.certinfo()
-        self.assertEquals('tls-srp.test.trustedhttp.org/O=sqs@tls-srp.test.trustedhttp.org (SRP)',
+        self.assertEquals('/CN=tls-srp.test.trustedhttp.org/O=sqs@tls-srp.test.trustedhttp.org (SRP)',
                           certinfo['subject'])
         self.assertEquals('PAKEProxy CA Certificate',
                           certinfo['issuer'])
+
+    def check_non_tls_login_url_response(self, res):
+        self.assertIn('Host: test.gnutls.org:5556', res.read())
+        certinfo = res.certinfo()
+        self.assertEquals('/O=GnuTLS test server/CN=test.gnutls.org',
+                          certinfo['subject'])
+        self.assertEquals('GnuTLS test CA', certinfo['issuer'])
 
     def test_simple(self):
         with pakeproxy() as pp:
@@ -90,7 +98,7 @@ class TestPAKEProxy(TestCase):
             for t in threads:
                 t.join()
                   
-        
-            
-    
-    
+    def test_passthru(self):
+        with pakeproxy() as pp:
+            res = proxy_urlopen(pp, self.non_tls_login_url)
+            self.check_non_tls_login_url_response(res)
