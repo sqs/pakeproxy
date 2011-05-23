@@ -3,12 +3,18 @@
 
 #include <gnutls/x509.h>
 
+typedef enum {
+  PP_PLAIN_PROXY = 0,
+  PP_HTTPS_TUNNEL
+} pp_proxy_type_t;
+
 typedef struct {
   const char *listen_host;
   int listen_port;
   const char *ca_cert_file;
   const char *ca_key_file;
   const char *client_priority;
+  pp_proxy_type_t proxy_type;
 } pp_config_t;
 
 typedef struct {

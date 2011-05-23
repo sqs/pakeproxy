@@ -37,7 +37,7 @@ static int tcp_connect(char* host, int port);
 static int do_tunnel(gnutls_session_t session_client,
                      gnutls_session_t session_target);
 
-int do_https_tunnel(gnutls_session_t session_client) {
+int do_proxy(gnutls_session_t session_client, pp_proxy_type_t proxy_type) {
   int ret;
   int sd_client = 0;
   gnutls_session_t session_target = 0;
@@ -45,12 +45,14 @@ int do_https_tunnel(gnutls_session_t session_client) {
 
   sd_client = (int)(long)gnutls_transport_get_ptr(session_client);
   ppsession = gnutls_session_get_ptr(session_client);
-  
-  ret = do_http_connect(sd_client, &ppsession->target_host,
-                        &ppsession->target_port);
-  if (ret != GNUTLS_E_SUCCESS) {
-    fprintf(stderr, "Failed to parse HTTP CONNECT\n");
-    goto err;
+
+  if (proxy_type == PP_HTTPS_TUNNEL) {
+    ret = do_http_connect(sd_client, &ppsession->target_host,
+                          &ppsession->target_port);
+    if (ret != GNUTLS_E_SUCCESS) {
+      fprintf(stderr, "Failed to parse HTTP CONNECT\n");
+      goto err;
+    }
   }
 
   ret = gnutls_handshake(session_client);
@@ -153,6 +155,9 @@ static int do_connect_target(gnutls_session_t* session,
             gnutls_strerror(ret));
     return ret;
   }
+
+  fprintf(stderr, "- Connected to %s:%d\n",
+          ppsession->target_host, ppsession->target_port);
   
   return GNUTLS_E_SUCCESS;
 }
