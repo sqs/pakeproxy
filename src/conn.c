@@ -37,7 +37,7 @@ static int do_tunnel(gnutls_session_t session_client,
                      gnutls_session_t session_target);
 static int do_passthru(gnutls_session_t session_client);
 
-int do_proxy(gnutls_session_t session_client, pp_proxy_type_t proxy_type) {
+int do_proxy(gnutls_session_t session_client) {
   int ret;
   int sd_client = 0;
   gnutls_session_t session_target = 0;
@@ -46,11 +46,9 @@ int do_proxy(gnutls_session_t session_client, pp_proxy_type_t proxy_type) {
   sd_client = (int)(long)gnutls_transport_get_ptr(session_client);
   ppsession = gnutls_session_get_ptr(session_client);
 
-  if (proxy_type == PP_HTTPS_TUNNEL) {
-    ret = do_http_connect(sd_client, ppsession);
-    if (ret == -1) {
-      goto err;
-    }
+  ret = do_http_connect(sd_client, ppsession);
+  if (ret == -1) {
+    goto err;
   }
 
   if ((ppsession->srp_user && ppsession->srp_passwd) ||

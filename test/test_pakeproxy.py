@@ -18,7 +18,7 @@ def pakeproxy(host='localhost', port=8443,
         p = None
     else:
         pp = {'host': host, 'port': port}
-        cmd = ['src/pakeproxy', '-t']
+        cmd = ['src/pakeproxy']
         if accounts_inline:
             cmd += ['-a', accounts_inline]
         if accounts_path:

@@ -37,7 +37,6 @@ gnutls_priority_t priority_cache;
 static pp_ca_t global_ca;
 static pp_config_t cfg;
 
-static void set_target_hostport(gnutls_session_t session, pp_session_t* ppsession);
 static void init_gnutls();
 static int open_listen_socket(const char *host, int port);
 static struct in_addr get_listen_addr(const char *listen_host);
@@ -52,23 +51,10 @@ static int retrieve_server_cert(gnutls_session_t session,
                                 gnutls_retr2_st* st) {
   gnutls_x509_privkey_t key;
   gnutls_x509_crt_t *crt;
-  pp_session_t* ppsession;
 
   crt = malloc(sizeof(gnutls_x509_crt_t));
   if (crt == NULL)
     errx(1, "malloc gnutls_x509_crt_t");
-
-  /* fill in target host/port */
-  ppsession = gnutls_session_get_ptr(session);
-  if (cfg.proxy_type != PP_HTTPS_TUNNEL) {
-    set_target_hostport(session, ppsession);
-  }
-
-  if (ppsession->target_host == NULL ||
-      ppsession->target_port == 0) {
-    fprintf(stderr, "- Couldn't determine server name\n");
-    return -1;
-  }
 
   get_x509_crt(session, &global_ca, crt, &key);
 
@@ -85,26 +71,6 @@ static int retrieve_server_cert(gnutls_session_t session,
   /* gnutls_certificate_set_x509_key(cred, &crt, 1, key); *//*TODO(sqs):whatfor?*/
   
   return 0;
-}
-
-static void set_target_hostport(gnutls_session_t session, pp_session_t* ppsession) {
-  char *server_name;
-  size_t server_name_size;
-  unsigned int server_name_type;
-  int ret;
-
-  server_name_size = SERVER_NAME_BUFFER_SIZE;
-  server_name = malloc(server_name_size + 1);
-  if (server_name == NULL)
-    err(1, "malloc server_name");
-
-  ret = gnutls_server_name_get(session, server_name, &server_name_size,
-                               &server_name_type, 0);
-  if (ret != GNUTLS_E_SUCCESS)
-    err(1, "gnutls_server_name_get: %s", gnutls_strerror(ret));
-
-  parse_hostport(server_name, &ppsession->target_host,
-                 &ppsession->target_port);
 }
 
 static int initialize_tls_session(gnutls_session_t *session) {
@@ -174,22 +140,18 @@ int main(int argc, char **argv) {
   cfg.ca_cert_file = DEFAULT_CA_CERT_FILE;
   cfg.ca_key_file = DEFAULT_CA_KEY_FILE;
   cfg.client_priority = DEFAULT_CLIENT_PRIORITY;
-  cfg.proxy_type = PP_PLAIN_PROXY;
   cfg.session_cache = 0;
   cfg.accounts_path = DEFAULT_ACCOUNTS_PATH;
   cfg.accounts_inline = NULL;
   cfg.enable_passthru = 1;
 
-  while ((c = getopt(argc, argv, "A:a:tsL")) != -1) {
+  while ((c = getopt(argc, argv, "A:a:sL")) != -1) {
     switch (c) {
       case 'A':
         cfg.accounts_path = optarg;
         break;
       case 'a':
         cfg.accounts_inline = optarg;
-        break;
-      case 't':
-        cfg.proxy_type = PP_HTTPS_TUNNEL;
         break;
       case 's':
         cfg.session_cache = 1;
@@ -333,7 +295,7 @@ static void* connection_thread(void* arg) {
   ppsession.cfg = &cfg;
   gnutls_session_set_ptr(session, &ppsession);
 
-  ret = do_proxy(session, cfg.proxy_type);
+  ret = do_proxy(session);
   if (ret != GNUTLS_E_SUCCESS)
     fprintf(stderr, "- Proxy exited with failure\n");
 
