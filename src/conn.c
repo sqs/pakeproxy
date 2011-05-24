@@ -11,6 +11,7 @@
 #include <netdb.h>
 #include <string.h>
 #include <unistd.h>
+#include <assert.h>
 
 #include <gnutls/gnutls.h>
 #include <gnutls/abstract.h>
@@ -246,6 +247,9 @@ static int do_connect_target(gnutls_session_t* session,
   int ret;
   int sd;
 
+  assert(ppsession->target_host != NULL);
+  assert(ppsession->target_port != 0);
+  
   sd = tcp_connect(ppsession->target_host,
                    ppsession->target_port);
 
@@ -266,7 +270,8 @@ static int do_connect_target(gnutls_session_t* session,
 
   ret = gnutls_handshake(*session);
   if (ret < 0) {
-    fprintf(stderr, "Proxy-target TLS handshake failed: %s\n",
+    fprintf(stderr, "- Target %s:%d TLS handshake failed: %s\n",
+            ppsession->target_host, ppsession->target_port,
             gnutls_strerror(ret));
     return ret;
   }
