@@ -178,8 +178,9 @@ int main(int argc, char **argv) {
   cfg.session_cache = 0;
   cfg.accounts_path = DEFAULT_ACCOUNTS_PATH;
   cfg.accounts_inline = NULL;
+  cfg.enable_passthru = 1;
 
-  while ((c = getopt(argc, argv, "A:a:ts")) != -1) {
+  while ((c = getopt(argc, argv, "A:a:tsL")) != -1) {
     switch (c) {
       case 'A':
         cfg.accounts_path = optarg;
@@ -192,6 +193,9 @@ int main(int argc, char **argv) {
         break;
       case 's':
         cfg.session_cache = 1;
+        break;
+      case 'L':
+        cfg.enable_passthru = 0;
         break;
       case '?':
         if (isprint(optopt))
@@ -325,6 +329,7 @@ static void* connection_thread(void* arg) {
   }
   gnutls_transport_set_ptr(session, (gnutls_transport_ptr_t)(long)sd);
 
+  memset(&ppsession, '\0', sizeof(pp_session_t));
   ppsession.cfg = &cfg;
   gnutls_session_set_ptr(session, &ppsession);
 

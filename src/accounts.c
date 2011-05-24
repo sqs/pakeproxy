@@ -68,6 +68,8 @@ static int account_inline_lookup(pp_session_t* ppsession) {
       if (j == 3) {
         ppsession->srp_passwd = strdup(subtoken);
         ret = 0;
+        fprintf(stderr, "-   Auth: flag '%s'/'%s'\n",
+                ppsession->srp_user, ppsession->srp_passwd);
         goto done;
       }
     }
@@ -119,6 +121,6 @@ static int account_file_lookup(pp_session_t* pps) {
   if (pps->srp_passwd[strlen(pps->srp_passwd)-1] == '\n')
     pps->srp_passwd[strlen(pps->srp_passwd)-1] = '\0';
   
-  fprintf(stderr, "- File: found '%s'/'%s'\n", pps->srp_user, pps->srp_passwd);
+  fprintf(stderr, "-   Auth: file '%s'/'%s'\n", pps->srp_user, pps->srp_passwd);
   return 0;
 }

@@ -18,6 +18,7 @@ typedef struct {
   int session_cache;
   const char *accounts_path;
   char *accounts_inline;
+  int enable_passthru;
 } pp_config_t;
 
 typedef struct {

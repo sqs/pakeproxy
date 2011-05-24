@@ -23,8 +23,10 @@
 #define MAX_BUFFER_SIZE 4096
 #define RECORD_BUFFER_SIZE MAX_BUFFER_SIZE
 #define HTTP_CONNECT_BUFFER_SIZE MAX_BUFFER_SIZE
+#define HTTP_PROXY_AUTH_BUFFER_SIZE MAX_BUFFER_SIZE
 
-static int do_http_connect(int sd, char** host, int* port);
+static int do_http_connect(int sd, pp_session_t* ppsession);
+static int parse_proxy_authorization_header(char* buf, char** user, char** passwd);
 static int do_connect_target(gnutls_session_t* session_target,
                              pp_session_t* ppsession_target);
 static int srp_cred_callback(gnutls_session_t session,
@@ -45,15 +47,15 @@ int do_proxy(gnutls_session_t session_client, pp_proxy_type_t proxy_type) {
   ppsession = gnutls_session_get_ptr(session_client);
 
   if (proxy_type == PP_HTTPS_TUNNEL) {
-    ret = do_http_connect(sd_client, &ppsession->target_host,
-                          &ppsession->target_port);
+    ret = do_http_connect(sd_client, ppsession);
     if (ret != GNUTLS_E_SUCCESS) {
       fprintf(stderr, "Failed to parse HTTP CONNECT\n");
       goto err;
     }
   }
 
-  if (site_uses_tls_login(ppsession->target_host)) {
+  if ((ppsession->srp_user && ppsession->srp_passwd) ||
+      !ppsession->cfg->enable_passthru) {
     ret = gnutls_handshake(session_client);
     if (ret != GNUTLS_E_SUCCESS) {
       fprintf(stderr, "Client handshake failed: %s\n", gnutls_strerror(ret));
@@ -87,11 +89,13 @@ err:
   return ret;
 }
 
-static int do_http_connect(int sd, char** host, int* port) {
-  char buf[HTTP_CONNECT_BUFFER_SIZE];
+static int do_http_connect(int sd, pp_session_t* ppsession) {
+  char buf[HTTP_CONNECT_BUFFER_SIZE+1];
   char *cur = buf;
   ssize_t len;
   ssize_t total_len = 0;
+  char* host;
+  int ret;
 
   for (;;) {
     len = recv(sd, cur, sizeof(buf) - (cur - buf), 0);
@@ -102,21 +106,80 @@ static int do_http_connect(int sd, char** host, int* port) {
     if (strncmp(cur - 4, "\r\n\r\n", 4) == 0)
       break;
   }
+  buf[HTTP_CONNECT_BUFFER_SIZE] = '\0';
+
+  ret = parse_proxy_authorization_header(buf, &ppsession->srp_user,
+                                         &ppsession->srp_passwd);
 
   buf[sizeof(buf)-1] = '\0';
   // printf("recv %u bytes: <<<%s>>>\n", total_len, buf);
   
   if (strncmp(buf, "CONNECT ", strlen("CONNECT ")) == 0) {
-    *host = buf + strlen("CONNECT ");
-    parse_hostport(*host, host, port);
-    *host = strdup(*host);
-    fprintf(stderr, "- Client requested HTTP CONNECT %s:%d\n", *host, *port);
+    host = buf + strlen("CONNECT ");
+    parse_hostport(host, &host, &ppsession->target_port);
+    ppsession->target_host = strdup(host);
+    fprintf(stderr, "- Client requested HTTP CONNECT %s:%d\n",
+            ppsession->target_host, ppsession->target_port);
 
-    strcpy(buf, "HTTP/1.1 200 OK\r\n\r\n");
+    /* try to get TLS login info from proxy-authorization or cmdline flags/file */
+    if (ppsession->srp_user && ppsession->srp_passwd) {
+      fprintf(stderr, "-   Auth: Proxy-Authz '%s'/'%s'\n",
+              ppsession->srp_user, ppsession->srp_passwd);
+      ret = 0;
+    } else {
+      ret = account_lookup(ppsession);
+    }
+
+    /* passthru? */
+    if (ret != 0 && ppsession->cfg->enable_passthru)
+      ret = 0;
+    
+    if (ret == 0) { /* found TLS login */
+      strcpy(buf, "HTTP/1.1 200 OK\r\n\r\n");
+    } else {
+      strcpy(buf, "HTTP/1.1 407 Proxy Authentication Required\r\nProxy-Authenticate Basic realm=\"PAKEProxy\"\r\nContent-Length: 0\r\nContent-Type: text/plain\r\n\r\n");
+    }
+
     len = send(sd, buf, strlen(buf), 0);
     if (len != strlen(buf))
       fprintf(stderr, "couldnt send full buf\n");
   }
+
+  return GNUTLS_E_SUCCESS;
+}
+
+static int parse_proxy_authorization_header(char* buf, char** user, char** passwd) {
+  char *auth_hdr;
+  char *b64val;
+  char *b64val_end;
+  char *val;
+  int ret;
+  const char *search_string = "\r\nProxy-Authorization: Basic ";
+
+  /* TODO(sqs): this header name should be case insensitive */
+  auth_hdr = strstr(buf, search_string);
+  if (auth_hdr == NULL)
+    return GNUTLS_E_INTERNAL_ERROR;
+
+  b64val = auth_hdr + strlen(search_string);
+  b64val_end = strstr(b64val, "\r\n");
+  *b64val_end = '\0';
+
+  printf("b64val = '%s'\n", b64val);
+  val = malloc(HTTP_PROXY_AUTH_BUFFER_SIZE+1);
+  if (val == NULL)
+    err(1, "malloc val");
+
+  ret = base64_decode(b64val, &val); /* TODO(sqs): free */
+  printf("val = '%*s' %p\n", ret, val, val);
+
+  /* TODO(sqs): check to ensure there is indeed a ':' in here */
+  *user = val;
+  *passwd = strchr(val, ':') + 1;
+  (*passwd)[-1] = '\0';
+
+  *user = strdup(*user);
+  *passwd = strdup(*passwd);
 
   return GNUTLS_E_SUCCESS;
 }
@@ -179,8 +242,12 @@ static int srp_cred_callback(gnutls_session_t session,
   ppsession = gnutls_session_get_ptr(session);
   if (ppsession == NULL)
     return -1;
+
+  ret = 0;
+  if (!ppsession->srp_user || !ppsession->srp_passwd) {
+    ret = account_lookup(ppsession);
+  }
   
-  ret = account_lookup(ppsession);
   if (ret == 0) {
     *username = strdup(ppsession->srp_user);
     *password = strdup(ppsession->srp_passwd);
