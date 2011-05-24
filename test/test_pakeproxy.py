@@ -6,7 +6,9 @@ import urllib2, os, re
 #from ProxyHTTPConnection import ConnectHTTPSHandler
 
 @contextmanager
-def pakeproxy(host='localhost', port=8443):
+def pakeproxy(host='localhost', port=8443,
+              accounts_inline='example.com,a,b|tls-srp.test.trustedhttp.org,user,secret',
+              accounts_path=None):
     pp_env = os.getenv('pake_proxy')
     if pp_env:
         pp_env = pp_env.split(':')
@@ -14,7 +16,12 @@ def pakeproxy(host='localhost', port=8443):
         p = None
     else:
         pp = {'host': host, 'port': port}
-        p = Popen(['src/pakeproxy'], stdout=PIPE, stderr=PIPE)
+        cmd = ['src/pakeproxy', '-t']
+        if accounts_inline:
+            cmd += ['-a', accounts_inline]
+        if accounts_path:
+            cmd += ['-A', accounts_path]
+        p = Popen(cmd, stdout=PIPE, stderr=PIPE)
     print("pakeproxy on %(host)s:%(port)d" % pp)
     try:
         yield pp
@@ -85,6 +92,18 @@ class TestPAKEProxy(TestCase):
 
     def test_simple(self):
         with pakeproxy() as pp:
+            res = proxy_urlopen(pp, self.url)
+            self.check_response(res)
+
+    def test_account_file(self):
+        import os
+        acctpath = '/tmp/pakeproxy_tmp/'
+        acctfile = acctpath + 'tls-srp.test.trustedhttp.org'
+        if not os.path.exists(acctpath):
+            os.mkdir(acctpath)
+        with open(acctfile, 'w') as f:
+            f.write('user,secret')
+        with pakeproxy(accounts_path=acctpath, accounts_inline='') as pp:
             res = proxy_urlopen(pp, self.url)
             self.check_response(res)
 

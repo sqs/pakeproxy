@@ -24,10 +24,6 @@
 #define RECORD_BUFFER_SIZE MAX_BUFFER_SIZE
 #define HTTP_CONNECT_BUFFER_SIZE MAX_BUFFER_SIZE
 
-/* TODO(sqs): parameterize these constants */
-#define SRPUSER "user"
-#define SRPPASSWD "secret"
-
 static int do_http_connect(int sd, char** host, int* port);
 static int do_connect_target(gnutls_session_t* session_target,
                              pp_session_t* ppsession_target);
@@ -137,6 +133,7 @@ static int do_connect_target(gnutls_session_t* session,
 
   gnutls_init(session, GNUTLS_CLIENT);
   gnutls_transport_set_ptr(*session, (gnutls_transport_ptr_t)(long)sd);
+  gnutls_session_set_ptr(*session, ppsession);
 
   gnutls_certificate_allocate_credentials(&cert_cred);
   gnutls_certificate_set_x509_trust_file(cert_cred, ppsession->cfg->ca_cert_file,
@@ -176,9 +173,23 @@ static int do_connect_target(gnutls_session_t* session,
 static int srp_cred_callback(gnutls_session_t session,
                              char** username,
                              char** password) {
-  *username = strdup(SRPUSER);
-  *password = strdup(SRPPASSWD);
-  return 0;
+  int ret;
+  pp_session_t* ppsession;
+
+  ppsession = gnutls_session_get_ptr(session);
+  if (ppsession == NULL)
+    return -1;
+  
+  ret = account_lookup(ppsession);
+  if (ret == 0) {
+    *username = strdup(ppsession->srp_user);
+    *password = strdup(ppsession->srp_passwd);
+    return 0;
+  } else {
+    *username = NULL;
+    *password = NULL;
+    return -1; /* error */
+  }
 }
 
 int tcp_connect(char* host, int port) {

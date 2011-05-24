@@ -26,6 +26,7 @@
 
 #define DEFAULT_CA_CERT_FILE "/home/sqs/src/pakeproxy/data/ca-cert.pem"
 #define DEFAULT_CA_KEY_FILE "/home/sqs/src/pakeproxy/data/ca-key.pem"
+#define DEFAULT_ACCOUNTS_PATH "~/.pakeproxy/"
 #define DEFAULT_CLIENT_PRIORITY "NORMAL"
 
 #define DH_BITS 1024
@@ -175,9 +176,17 @@ int main(int argc, char **argv) {
   cfg.client_priority = DEFAULT_CLIENT_PRIORITY;
   cfg.proxy_type = PP_PLAIN_PROXY;
   cfg.session_cache = 0;
+  cfg.accounts_path = DEFAULT_ACCOUNTS_PATH;
+  cfg.accounts_inline = NULL;
 
-  while ((c = getopt(argc, argv, "ts")) != -1) {
+  while ((c = getopt(argc, argv, "A:a:ts")) != -1) {
     switch (c) {
+      case 'A':
+        cfg.accounts_path = optarg;
+        break;
+      case 'a':
+        cfg.accounts_inline = optarg;
+        break;
       case 't':
         cfg.proxy_type = PP_HTTPS_TUNNEL;
         break;

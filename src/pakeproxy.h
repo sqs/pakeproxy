@@ -16,12 +16,16 @@ typedef struct {
   const char *client_priority;
   pp_proxy_type_t proxy_type;
   int session_cache;
+  const char *accounts_path;
+  char *accounts_inline;
 } pp_config_t;
 
 typedef struct {
   pp_config_t *cfg;
   char *target_host;
   int target_port;
+  char *srp_user;
+  char *srp_passwd;
 } pp_session_t;
 
 typedef struct {
