@@ -48,8 +48,7 @@ int do_proxy(gnutls_session_t session_client, pp_proxy_type_t proxy_type) {
 
   if (proxy_type == PP_HTTPS_TUNNEL) {
     ret = do_http_connect(sd_client, ppsession);
-    if (ret != GNUTLS_E_SUCCESS) {
-      fprintf(stderr, "Failed to parse HTTP CONNECT\n");
+    if (ret == -1) {
       goto err;
     }
   }
@@ -89,6 +88,8 @@ err:
   return ret;
 }
 
+/* Returns 0 on success (= continue with tunnel or passthru), and -1 on error
+ * (= proxy auth challenge) */
 static int do_http_connect(int sd, pp_session_t* ppsession) {
   char buf[HTTP_CONNECT_BUFFER_SIZE+1];
   char *cur = buf;
@@ -133,19 +134,33 @@ static int do_http_connect(int sd, pp_session_t* ppsession) {
     /* passthru? */
     if (ret != 0 && ppsession->cfg->enable_passthru)
       ret = 0;
-    
+
+    int should_quit = 0;
     if (ret == 0) { /* found TLS login */
       strcpy(buf, "HTTP/1.1 200 OK\r\n\r\n");
     } else {
-      strcpy(buf, "HTTP/1.1 407 Proxy Authentication Required\r\nProxy-Authenticate Basic realm=\"PAKEProxy\"\r\nContent-Length: 0\r\nContent-Type: text/plain\r\n\r\n");
+      should_quit = 1;
+      strcpy(buf,
+             "HTTP/1.1 407 Proxy Authentication Required\r\n"
+             "Server: PAKEProxy\r\n"
+             "Content-Length: 4\r\n"
+             "Content-Type: text/plain\r\n"
+             "Proxy-Authenticate: Basic realm=\"PAKEProxy\"\r\n"
+             "Connection: close\r\n"
+             "\r\n"
+             "auth");
     }
 
     len = send(sd, buf, strlen(buf), 0);
     if (len != strlen(buf))
       fprintf(stderr, "couldnt send full buf\n");
+
+    if (should_quit) {
+      return -1;
+    }
   }
 
-  return GNUTLS_E_SUCCESS;
+  return 0;
 }
 
 static int parse_proxy_authorization_header(char* buf, char** user, char** passwd) {

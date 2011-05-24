@@ -335,7 +335,7 @@ static void* connection_thread(void* arg) {
 
   ret = do_proxy(session, cfg.proxy_type);
   if (ret != GNUTLS_E_SUCCESS)
-    err(1, "do_proxy");
+    fprintf(stderr, "- Proxy exited with failure\n");
 
   close((int)(long)gnutls_transport_get_ptr(session));
   gnutls_deinit(session);
