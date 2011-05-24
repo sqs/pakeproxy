@@ -4,11 +4,12 @@
          xmlns="http://www.mozilla.org/keymaster/gatekeeper/there.is.only.xul">
   <script src="ssl.js"/>
   <script src="pakeproxy.js"/>
-  <textbox id="urlbar">
-    <box id="pake-identity-box" role="button">
+  <hbox id="urlbar-icons">
+    <box id="pake-identity-box" role="button" hidden="true" position="1">
+      <image id="pake-identity-box-icon"/>
       <hbox id="pake-identity-labels">
-        <label id="pake-identity-name">sqs</label>
+        <label id="pake-identity-name"/>
       </hbox>
     </box>
-  </textbox>
+  </hbox>
 </overlay>

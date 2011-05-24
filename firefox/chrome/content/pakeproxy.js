@@ -1,52 +1,50 @@
-var pakeproxy;
-
-function log(s) {
-  Firebug.Console.log(s);
+function dlog(s) {
+  dump(s + "\n");
 }
 
-function PAKEProxy() { }
-
-PAKEProxy.prototype = {
-  onLoad: function() {
-    this._setTabSelectListener(true);
-    this.initialized = true;
-    this.onTabSelected({target: gBrowser.selectedTab});
+var tabListener = {
+  onSecurityChange: function(browser, webProgress, request, state) {
+    dlog("onSecurityChange: " + request.toString());
+    tabListener._updateSecurityStatus();
   },
 
   onTabSelected: function(event) {
+    dlog("onTabSelected");
+    tabListener._updateSecurityStatus();
+  },
+
+  //////////////////////////////////////////////////////////////////////////////
+
+  _updateSecurityStatus: function() {
     var cert = getServerCert();
     if (cert && cert.issuerCommonName == "PAKEProxy CA Certificate") {
       var org = cert.organization;
       var name = org.substring(0, org.indexOf('@'));
       this._setIdentityLabel(name);
-    }
-  },
-
-  _setTabSelectListener: function(on) {
-    var container = gBrowser.tabContainer;
-    if (on) {
-      container.addEventListener("TabSelect", this.onTabSelected, false);
-      container.addEventListener("TabOpen", this.onTabSelected, false);
     } else {
-      container.removeEventListener("TabSelect", this.onTabSelected, false);
-      container.removeEventListener("TabOpen", this.onTabSelected, false);
+      this._setIdentityLabel("");
     }
   },
 
   _setIdentityLabel: function(name) {
+    dlog("_setIdentityLabel: " + name);
     var label = document.getElementById("pake-identity-name");
+    var box = document.getElementById("pake-identity-box");
     label.value = name;
-    label.hidden = (name == "");
+    label.tooltiptext = "Hello";
+    box.hidden = (name == "");
   }
 
 };
 
+window.addEventListener("load", function() {
+  var container = gBrowser.tabContainer;
+  gBrowser.addTabsProgressListener(tabListener);
+  container.addEventListener("TabSelect", tabListener.onTabSelected, false);
+}, false);
 
-function pakeproxy_window_onLoad() {
-  gBrowser.addEventListener("load", function() {
-    pakeproxy = new PAKEProxy();
-    pakeproxy.onLoad();
-  }, true);
-}
-
-window.addEventListener("load", pakeproxy_window_onLoad, false);
+window.addEventListener("unload", function() {
+  var container = gBrowser.tabContainer;
+  gBrowser.removeTabsProgressListener(tabListener);
+  container.removeEventListener("TabSelect", tabListener.onTabSelected, false);
+}, false);
