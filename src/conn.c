@@ -39,7 +39,7 @@ static const char *HTTP_407_MSG =
     "auth";
 
 static const char *HTTP_502_MSG =
-    "HTTP/1/1 502 Bad Gateway\r\n"
+    "HTTP/1.1 502 Bad Gateway\r\n"
     "Server: PAKEProxy\r\n"
     "Content-Length: 15\r\n"
     "Content-Type: text/plain\r\n"
