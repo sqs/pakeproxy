@@ -10,10 +10,6 @@
 static int account_inline_lookup(pp_session_t* ppsession);
 static int account_file_lookup(pp_session_t* ppsession);
 
-int site_uses_tls_login(char* host) {
-  return (strcmp(host, "tls-srp.test.trustedhttp.org") == 0);
-}
-
 int account_lookup(pp_session_t* ppsession) {
   int ret;
 
