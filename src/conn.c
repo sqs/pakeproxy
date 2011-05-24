@@ -142,30 +142,31 @@ static int read_http_connect(int sd, pp_session_t* ppsession) {
   buf[sizeof(buf)-1] = '\0';
   // printf("recv %u bytes: <<<%s>>>\n", total_len, buf);
   
-  if (strncmp(buf, "CONNECT ", strlen("CONNECT ")) == 0) {
-    host = buf + strlen("CONNECT ");
-    parse_hostport(host, &host, &ppsession->target_port);
-    ppsession->target_host = strdup(host);
-    fprintf(stderr, "- Client requested HTTP CONNECT %s:%d\n",
-            ppsession->target_host, ppsession->target_port);
+  if (strncmp(buf, "CONNECT ", strlen("CONNECT ")) != 0)
+    return -1;
+  
+  host = buf + strlen("CONNECT ");
+  parse_hostport(host, &host, &ppsession->target_port);
+  ppsession->target_host = strdup(host);
+  fprintf(stderr, "- Client requested HTTP CONNECT %s:%d\n",
+          ppsession->target_host, ppsession->target_port);
 
-    /* try to get TLS login info from proxy-authorization or cmdline flags/file */
-    if (ppsession->srp_user && ppsession->srp_passwd) {
-      fprintf(stderr, "-   Auth: Proxy-Authz '%s'/'%s'\n",
-              ppsession->srp_user, ppsession->srp_passwd);
-      ret = 0;
-    } else {
-      ret = account_lookup(ppsession);
-    }
+  /* try to get TLS login info from proxy-authorization or cmdline flags/file */
+  if (ppsession->srp_user && ppsession->srp_passwd) {
+    fprintf(stderr, "-   Auth: Proxy-Authz '%s'/'%s'\n",
+            ppsession->srp_user, ppsession->srp_passwd);
+    ret = 0;
+  } else {
+    ret = account_lookup(ppsession);
+  }
 
-    /* passthru? */
-    if (ret != 0 && ppsession->cfg->enable_passthru)
-      ret = 0;
+  /* passthru? */
+  if (ret != 0 && ppsession->cfg->enable_passthru)
+    ret = 0;
 
-    if (ret != 0) {
-      send_http_msg(sd, HTTP_407_MSG);
-      return -1;
-    }
+  if (ret != 0) {
+    send_http_msg(sd, HTTP_407_MSG);
+    return -1;
   }
 
   return 0;
