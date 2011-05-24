@@ -25,10 +25,35 @@
 #define HTTP_CONNECT_BUFFER_SIZE MAX_BUFFER_SIZE
 #define HTTP_PROXY_AUTH_BUFFER_SIZE MAX_BUFFER_SIZE
 
-static int do_http_connect(int sd, pp_session_t* ppsession);
+static const char *HTTP_200_MSG =
+    "HTTP/1.1 200 OK\r\n\r\n";
+
+static const char *HTTP_407_MSG =
+    "HTTP/1.1 407 Proxy Authentication Required\r\n"
+    "Server: PAKEProxy\r\n"
+    "Content-Length: 4\r\n"
+    "Content-Type: text/plain\r\n"
+    "Proxy-Authenticate: Basic realm=\"PAKEProxy\"\r\n"
+    "Connection: close\r\n"
+    "\r\n"
+    "auth";
+
+static const char *HTTP_502_MSG =
+    "HTTP/1/1 502 Bad Gateway\r\n"
+    "Server: PAKEProxy\r\n"
+    "Content-Length: 15\r\n"
+    "Content-Type: text/plain\r\n"
+    "Connection: close\r\n"
+    "\r\n"
+    "502 Bad Gateway";
+
+static int read_http_connect(int sd, pp_session_t* ppsession);
+static int send_http_msg(int sd, const char *msg);
+static int handle_target_handshake_error(gnutls_session_t session,
+                                         int gnutls_error, int sd_client);
 static int parse_proxy_authorization_header(char* buf, char** user, char** passwd);
 static int do_connect_target(gnutls_session_t* session_target,
-                             pp_session_t* ppsession_target);
+                               pp_session_t* ppsession_target);
 static int srp_cred_callback(gnutls_session_t session,
                              char** username,
                              char** password);
@@ -46,22 +71,24 @@ int do_proxy(gnutls_session_t session_client) {
   sd_client = (int)(long)gnutls_transport_get_ptr(session_client);
   ppsession = gnutls_session_get_ptr(session_client);
 
-  ret = do_http_connect(sd_client, ppsession);
+  ret = read_http_connect(sd_client, ppsession);
   if (ret == -1) {
     goto err;
   }
 
   if ((ppsession->srp_user && ppsession->srp_passwd) ||
       !ppsession->cfg->enable_passthru) {
-    ret = gnutls_handshake(session_client);
-    if (ret != GNUTLS_E_SUCCESS) {
-      fprintf(stderr, "Client handshake failed: %s\n", gnutls_strerror(ret));
-      goto err;
-    }
-
     ret = do_connect_target(&session_target, ppsession);
     if (ret != GNUTLS_E_SUCCESS) {
       fprintf(stderr, "Connect to target failed: %s\n", gnutls_strerror(ret));
+      handle_target_handshake_error(session_target, ret, sd_client);
+      goto err;
+    }
+
+    send_http_msg(sd_client, HTTP_200_MSG);
+    ret = gnutls_handshake(session_client);
+    if (ret != GNUTLS_E_SUCCESS) {
+      fprintf(stderr, "Client handshake failed: %s\n", gnutls_strerror(ret));
       goto err;
     }
 
@@ -71,6 +98,7 @@ int do_proxy(gnutls_session_t session_client) {
       goto err;
     }
   } else {
+    send_http_msg(sd_client, HTTP_200_MSG);
     ret = do_passthru(session_client);
     if (ret != GNUTLS_E_SUCCESS) {
       fprintf(stderr, "Passthru failed: %s\n", gnutls_strerror(ret));
@@ -88,7 +116,7 @@ err:
 
 /* Returns 0 on success (= continue with tunnel or passthru), and -1 on error
  * (= proxy auth challenge) */
-static int do_http_connect(int sd, pp_session_t* ppsession) {
+static int read_http_connect(int sd, pp_session_t* ppsession) {
   char buf[HTTP_CONNECT_BUFFER_SIZE+1];
   char *cur = buf;
   ssize_t len;
@@ -133,29 +161,44 @@ static int do_http_connect(int sd, pp_session_t* ppsession) {
     if (ret != 0 && ppsession->cfg->enable_passthru)
       ret = 0;
 
-    int should_quit = 0;
-    if (ret == 0) { /* found TLS login */
-      strcpy(buf, "HTTP/1.1 200 OK\r\n\r\n");
-    } else {
-      should_quit = 1;
-      strcpy(buf,
-             "HTTP/1.1 407 Proxy Authentication Required\r\n"
-             "Server: PAKEProxy\r\n"
-             "Content-Length: 4\r\n"
-             "Content-Type: text/plain\r\n"
-             "Proxy-Authenticate: Basic realm=\"PAKEProxy\"\r\n"
-             "Connection: close\r\n"
-             "\r\n"
-             "auth");
-    }
-
-    len = send(sd, buf, strlen(buf), 0);
-    if (len != strlen(buf))
-      fprintf(stderr, "couldnt send full buf\n");
-
-    if (should_quit) {
+    if (ret != 0) {
+      send_http_msg(sd, HTTP_407_MSG);
       return -1;
     }
+  }
+
+  return 0;
+}
+
+static int send_http_msg(int sd, const char *msg) {
+  ssize_t len;
+  len = send(sd, msg, strlen(msg), 0);
+  if (len != strlen(msg))
+    err(1, "send_http_msg");
+  return 0;
+}
+
+static int handle_target_handshake_error(gnutls_session_t session,
+                                         int gnutls_error, int sd_client) {
+  if (gnutls_error != GNUTLS_E_WARNING_ALERT_RECEIVED &&
+      gnutls_error != GNUTLS_E_FATAL_ALERT_RECEIVED) {
+    fprintf(stderr, "- Unexpected target handshake error: %s\n",
+            gnutls_strerror(gnutls_error));
+    return -1;
+  }
+
+  gnutls_alert_description_t alert = gnutls_alert_get(session);
+
+  fprintf(stderr, "- Got TLS alert %s\n", gnutls_alert_get_name(alert));
+
+  switch (alert) {
+    case GNUTLS_A_UNKNOWN_PSK_IDENTITY:
+    case GNUTLS_A_BAD_RECORD_MAC:
+      send_http_msg(sd_client, HTTP_407_MSG);
+      break;
+    default:
+      send_http_msg(sd_client, HTTP_502_MSG);
+      break;
   }
 
   return 0;
@@ -218,16 +261,12 @@ static int do_connect_target(gnutls_session_t* session,
   if (ret != GNUTLS_E_SUCCESS)
     errx(1, "gnutls_credentials_set CRT: %s", gnutls_strerror(ret));
 
-  if (site_uses_tls_login(ppsession->target_host)) {
-    gnutls_priority_set_direct(*session, "NONE:+AES-256-CBC:+AES-128-CBC:+SRP:+SHA1:+COMP-NULL:+VERS-TLS1.1:+VERS-TLS1.0", NULL);
-    gnutls_srp_allocate_client_credentials(&srp_cred);
-    gnutls_srp_set_client_credentials_function(srp_cred, srp_cred_callback);
-    ret = gnutls_credentials_set(*session, GNUTLS_CRD_SRP, srp_cred);
-    if (ret != GNUTLS_E_SUCCESS)
-      errx(1, "gnutls_credentials_set SRP: %s", gnutls_strerror(ret));
-  } else {
-    gnutls_priority_set_direct(*session, "NORMAL", NULL);
-  }
+  gnutls_priority_set_direct(*session, "NONE:+AES-256-CBC:+AES-128-CBC:+SRP:+SHA1:+COMP-NULL:+VERS-TLS1.1:+VERS-TLS1.0", NULL);
+  gnutls_srp_allocate_client_credentials(&srp_cred);
+  gnutls_srp_set_client_credentials_function(srp_cred, srp_cred_callback);
+  ret = gnutls_credentials_set(*session, GNUTLS_CRD_SRP, srp_cred);
+  if (ret != GNUTLS_E_SUCCESS)
+    errx(1, "gnutls_credentials_set SRP: %s", gnutls_strerror(ret));
 
   gnutls_server_name_set(*session, GNUTLS_NAME_DNS,
                          ppsession->target_host,
