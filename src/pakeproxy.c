@@ -146,7 +146,7 @@ int main(int argc, char **argv) {
   cfg.accounts_inline = NULL;
   cfg.enable_passthru = 1;
 
-  while ((c = getopt(argc, argv, "A:a:sL")) != -1) {
+  while ((c = getopt(argc, argv, "A:a:sLl:p:")) != -1) {
     switch (c) {
       case 'A':
         cfg.accounts_path = optarg;
@@ -159,6 +159,12 @@ int main(int argc, char **argv) {
         break;
       case 'L':
         cfg.enable_passthru = 0;
+        break;
+      case 'l':
+        cfg.listen_host = optarg;
+        break;
+      case 'p':
+        cfg.listen_port = atoi(optarg);
         break;
       case '?':
         if (isprint(optopt))
