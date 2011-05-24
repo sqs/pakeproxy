@@ -1,4 +1,4 @@
-from subprocess import Popen, PIPE, STDOUT, check_output
+from subprocess import Popen, PIPE, STDOUT, check_output, CalledProcessError
 from unittest import TestCase
 from contextlib import contextmanager
 import threading
@@ -112,8 +112,8 @@ class TestPAKEProxy(TestCase):
 
     def test_srp_failure(self):
         with pakeproxy() as pp:
-            res = proxy_urlopen(pp, self.url)
-            self.check_response(res)
+            self.assertRaises(CalledProcessError, proxy_urlopen,
+                              pp, self.url, proxy_user="bad:user")
             
     def test_proxy_authz(self):
         with pakeproxy(accounts_path=None, accounts_inline=None) as pp:
