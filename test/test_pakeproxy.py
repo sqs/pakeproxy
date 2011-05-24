@@ -38,16 +38,9 @@ def proxy_urlopen(pp, url, proxy_user=None):
         cmd += ['--proxy-user', proxy_user]
     out =  check_output(cmd, stderr=STDOUT,
                         env={'https_proxy': https_proxy})
-    return WgetResponse(out)
-    # opener = urllib2.build_opener(ConnectHTTPSHandler)
-    # urllib2.install_opener(opener)
-    # 
-    # req = urllib2.Request(url)
-    # req.set_proxy(https_proxy, 'https')
-    # # req.set_tunnel('%(host)s:%(port)d' % pp, 'https')
-    # return urllib2.urlopen(req)
+    return CurlResponse(out)
 
-class WgetResponse(object):
+class CurlResponse(object):
     def __init__(self, raw):
         self.raw = raw
 
