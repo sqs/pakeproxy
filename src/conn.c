@@ -225,7 +225,7 @@ static int parse_proxy_authorization_header(char* buf, char** user, char** passw
   if (val == NULL)
     err(1, "malloc val");
 
-  ret = base64_decode(b64val, &val); /* TODO(sqs): free */
+  ret = base64_decode(b64val, (unsigned char **)&val); /* TODO(sqs): free */
 
   /* TODO(sqs): check to ensure there is indeed a ':' in here */
   *user = val;

@@ -182,7 +182,7 @@ int main(int argc, char **argv) {
 
   for (;;) {
     sd = do_accept(listen_sd);
-    pthread_create(&thread_id, NULL, connection_thread, (void*)sd);
+    pthread_create(&thread_id, NULL, connection_thread, (void*)(long)sd);
   }
 
   close(listen_sd);
@@ -282,12 +282,12 @@ static void* connection_thread(void* arg) {
   pp_session_t ppsession;
   int ret;
 
-  sd = (int)arg;
+  sd = (int)(long)arg;
 
   ret = initialize_tls_session(&session);
   if (ret != GNUTLS_E_SUCCESS) {
     fprintf(stderr, "Error initializing TLS session\n");
-    return ret;
+    return (void *)(long)ret;
   }
   gnutls_transport_set_ptr(session, (gnutls_transport_ptr_t)(long)sd);
 
