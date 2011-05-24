@@ -242,7 +242,6 @@ static int parse_proxy_authorization_header(char* buf, char** user, char** passw
 static int do_connect_target(gnutls_session_t* session,
                              pp_session_t* ppsession) {
   gnutls_srp_client_credentials_t srp_cred;
-  gnutls_certificate_credentials_t cert_cred;
   int ret;
   int sd;
 
@@ -252,13 +251,6 @@ static int do_connect_target(gnutls_session_t* session,
   gnutls_init(session, GNUTLS_CLIENT);
   gnutls_transport_set_ptr(*session, (gnutls_transport_ptr_t)(long)sd);
   gnutls_session_set_ptr(*session, ppsession);
-
-  gnutls_certificate_allocate_credentials(&cert_cred);
-  gnutls_certificate_set_x509_trust_file(cert_cred, ppsession->cfg->ca_cert_file,
-                                         GNUTLS_X509_FMT_PEM);
-  ret = gnutls_credentials_set(*session, GNUTLS_CRD_CERTIFICATE, cert_cred);
-  if (ret != GNUTLS_E_SUCCESS)
-    errx(1, "gnutls_credentials_set CRT: %s", gnutls_strerror(ret));
 
   gnutls_priority_set_direct(*session, "NONE:+AES-256-CBC:+AES-128-CBC:+SRP:+SHA1:+COMP-NULL:+VERS-TLS1.1:+VERS-TLS1.0", NULL);
   gnutls_srp_allocate_client_credentials(&srp_cred);
