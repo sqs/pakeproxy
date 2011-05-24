@@ -104,6 +104,7 @@ static int initialize_tls_session(gnutls_session_t *session) {
     goto err;
   }
 
+  /* GnuTLS BUG: need both of these, but the server one is deprecated */
   gnutls_certificate_set_retrieve_function(*cred, retrieve_server_cert);
   gnutls_certificate_server_set_retrieve_function(
       *cred,
