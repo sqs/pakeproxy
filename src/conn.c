@@ -73,6 +73,7 @@ int do_proxy(gnutls_session_t session_client) {
 
   ret = read_http_connect(sd_client, ppsession);
   if (ret == -1) {
+    fprintf(stderr, "- Read HTTP connect failed\n");
     goto err;
   }
 
