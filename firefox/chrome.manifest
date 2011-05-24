@@ -1,0 +1,7 @@
+content     pakeproxy    chrome/content/
+skin pakeproxy classic/1.0 chrome/skin/
+
+overlay chrome://browser/content/browser.xul chrome://pakeproxy/content/location_bar.xul
+
+
+#style chrome://browser/content/browser.xul chrome://pakeproxy/skin/pakeproxy.css

@@ -1,0 +1,24 @@
+#pake-identity-box {
+  background-color: rgba(170, 50, 170, 0.8);
+  color: white;
+  font-weight:bold;
+  text-shadow: 0 1px 0 rgba(0,0,0,.25);
+  background-image: -moz-linear-gradient(rgba(170,170,170,.25), rgba(0,0,0,.3));
+  box-shadow: 0 0 0 1px rgba(0,0,0,.1) inset;
+  border-radius: 1.5px;
+}
+
+#pake-identity-box:-moz-focusring {
+  outline: 1px dotted -moz-DialogText;
+}
+
+#pake-identity-box:hover:active,
+#pake-identity-box[open="true"] {
+  background-image: -moz-linear-gradient(rgba(0,0,0,.4), rgba(0,0,0,.1));
+}
+
+#pake-identity-labels {
+  -moz-padding-start: 3px;
+  -moz-padding-end: 3px;
+}
+

@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<?xml-stylesheet href="chrome://pakeproxy/skin/overlay.css" type="text/css"?>
+<overlay id="pakeproxy"
+         xmlns="http://www.mozilla.org/keymaster/gatekeeper/there.is.only.xul">
+  <script src="ssl.js"/>
+  <script src="pakeproxy.js"/>
+  <textbox id="urlbar">
+    <box id="pake-identity-box" role="button">
+      <hbox id="pake-identity-labels">
+        <label id="pake-identity-name">sqs</label>
+      </hbox>
+    </box>
+  </textbox>
+</overlay>
