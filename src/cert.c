@@ -16,9 +16,6 @@
 #define CRT_EXT "crt"
 #define KEY_EXT "key"
 
-/* TODO(sqs): parameterize */
-#define SRPUSER "sqs"
-
 static gnutls_datum_t load_file(const char *file);
 static void unload_file(gnutls_datum_t data);
 static void save_datum(gnutls_datum_t data, const char* file);
@@ -86,7 +83,7 @@ int get_x509_crt(gnutls_session_t session,
 
   ppsession = gnutls_session_get_ptr(session);
   server_name = ppsession->target_host;
-  username = SRPUSER;
+  username = ppsession->srp_user;
 
   ret = find_x509_crt(server_name, username, crt, key);
   if (ret != GNUTLS_E_SUCCESS) {

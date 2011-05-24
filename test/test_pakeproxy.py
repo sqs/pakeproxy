@@ -81,7 +81,7 @@ class TestPAKEProxy(TestCase):
     def check_response(self, res):
         self.assertIn('user is: user', res.read())
         certinfo = res.certinfo()
-        self.assertEquals('CN=tls-srp.test.trustedhttp.org; O=sqs@tls-srp.test.trustedhttp.org (SRP)',
+        self.assertEquals('CN=tls-srp.test.trustedhttp.org; O=user@tls-srp.test.trustedhttp.org (SRP)',
                           certinfo['subject'])
         self.assertEquals('CN=PAKEProxy CA Certificate',
                           certinfo['issuer'])
