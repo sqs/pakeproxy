@@ -221,13 +221,11 @@ static int parse_proxy_authorization_header(char* buf, char** user, char** passw
   b64val_end = strstr(b64val, "\r\n");
   *b64val_end = '\0';
 
-  printf("b64val = '%s'\n", b64val);
   val = malloc(HTTP_PROXY_AUTH_BUFFER_SIZE+1);
   if (val == NULL)
     err(1, "malloc val");
 
   ret = base64_decode(b64val, &val); /* TODO(sqs): free */
-  printf("val = '%*s' %p\n", ret, val, val);
 
   /* TODO(sqs): check to ensure there is indeed a ':' in here */
   *user = val;
