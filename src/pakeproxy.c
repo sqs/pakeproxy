@@ -42,6 +42,7 @@ static int open_listen_socket(const char *host, int port);
 static struct in_addr get_listen_addr(const char *listen_host);
 static int do_accept(int listen_sd);
 static void* connection_thread(void* arg);
+static void print_usage(char *argv0);
 
 static int retrieve_server_cert(gnutls_session_t session,
                                 const gnutls_datum_t* req_ca_dn,
@@ -146,7 +147,7 @@ int main(int argc, char **argv) {
   cfg.accounts_inline = NULL;
   cfg.enable_passthru = 1;
 
-  while ((c = getopt(argc, argv, "A:a:sLl:p:")) != -1) {
+  while ((c = getopt(argc, argv, "A:a:sLl:p:h")) != -1) {
     switch (c) {
       case 'A':
         cfg.accounts_path = optarg;
@@ -173,9 +174,10 @@ int main(int argc, char **argv) {
           fprintf(stderr,
                    "Unknown option character `\\x%x'.\n",
                    optopt);
-        return 1;
+      case 'h':
       default:
-        abort();
+        print_usage(argv[0]);
+        return 1;
     }
   }
 
@@ -310,4 +312,29 @@ static void* connection_thread(void* arg) {
   gnutls_deinit(session);
 
   return 0;
+}
+
+static void print_opt(char *opt, char *desc, char *more) {
+  static const char *pad = "  ";
+  printf("  %s\t%s\n", opt, desc);
+  if (more)
+    printf("  %*s\t%s\n", strlen(opt), pad, more);
+  printf("\n");
+}
+
+static void print_usage(char *argv0) {
+  printf("Usage: %s [options]\n\n", argv0);
+  printf("Proxies HTTPS connections to TLS-SRP sites\n");
+  printf("More info: http://trustedhttp.org or email <sqs@cs.stanford.edu>\n\n");
+  printf("Options:\n");
+  print_opt("-A <dir>", "Set directory where account files are stored",
+            "(default: ~/.pakeproxy/)");
+  print_opt("-a <accounts>", "Set accounts on command-line",
+            "(format: \"host1,user1,pwd1|host2,user2,pwd2\")");
+  print_opt("-s      ", "Use TLS session cache", "(default: off)");
+  print_opt("-L      ", "Disable passthru of non-SRP TLS connections",
+            "(default: enable)");
+  print_opt("-l <host/ip>", "Listen address/host", "(default: 127.0.0.1)");
+  print_opt("-p <port>", "Listen port", "(default: 8443)");
+  print_opt("-h      ", "Show this help message", NULL);
 }
