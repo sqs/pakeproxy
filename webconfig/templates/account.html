@@ -1,0 +1,17 @@
+$def with (account)
+$ host = ""
+$ user = ""
+$ passwd = ""
+$if account:
+  $ host = account.host
+  $ user = account.user
+  $ passwd = account.passwd
+<form action="" method="post">
+  <input placeholder="New host" type=text name=host value="$host" size="32">
+  <input placeholder="New user" type=text name=user value="$user" size="10">
+  <input placeholder="New passwd" type=text name=passwd value="$passwd" size="12">
+  $if account:
+    <input type=submit value="Save">
+  $else:
+    <input type=submit value="Add">
+</form>

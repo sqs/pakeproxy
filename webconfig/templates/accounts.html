@@ -1,0 +1,8 @@
+$def with (accounts)
+
+<ul>
+<li>$:render.account(None)</li>
+$for account in accounts:
+  <li>$:render.account(account)</li>
+
+</ul>
