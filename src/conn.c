@@ -50,7 +50,7 @@ static const char *HTTP_502_MSG =
 
 static int read_http_connect(int sd, pp_session_t* ppsession);
 static int send_http_msg(int sd, const char *msg);
-static int handle_target_handshake_error(gnutls_session_t session,
+static int handle_target_handshake_error(gnutls_session_t session, pp_session_t *pps,
                                          int gnutls_error, int sd_client);
 static int parse_proxy_authorization_header(char* buf, char** user, char** passwd);
 static int do_connect_target(gnutls_session_t* session_target,
@@ -83,7 +83,7 @@ int do_proxy(gnutls_session_t session_client) {
     ret = do_connect_target(&session_target, ppsession);
     if (ret != GNUTLS_E_SUCCESS) {
       fprintf(stderr, "Connect to target failed: %s\n", gnutls_strerror(ret));
-      handle_target_handshake_error(session_target, ret, sd_client);
+      handle_target_handshake_error(session_target, ppsession, ret, sd_client);
       goto err;
     }
 
@@ -137,8 +137,10 @@ static int read_http_connect(int sd, pp_session_t* ppsession) {
   }
   buf[HTTP_CONNECT_BUFFER_SIZE] = '\0';
 
-  ret = parse_proxy_authorization_header(buf, &ppsession->srp_user,
-                                         &ppsession->srp_passwd);
+  if (ppsession->cfg->enable_proxy_basic_auth) {
+    ret = parse_proxy_authorization_header(buf, &ppsession->srp_user,
+                                           &ppsession->srp_passwd);
+  }
 
   buf[sizeof(buf)-1] = '\0';
   // printf("recv %u bytes: <<<%s>>>\n", total_len, buf);
@@ -166,7 +168,10 @@ static int read_http_connect(int sd, pp_session_t* ppsession) {
     ret = 0;
 
   if (ret != 0) {
-    send_http_msg(sd, HTTP_407_MSG);
+    if (ppsession->cfg->enable_proxy_basic_auth)
+      send_http_msg(sd, HTTP_407_MSG);
+    else
+      send_http_msg(sd, HTTP_502_MSG);
     return -1;
   }
 
@@ -182,6 +187,7 @@ static int send_http_msg(int sd, const char *msg) {
 }
 
 static int handle_target_handshake_error(gnutls_session_t session,
+                                         pp_session_t *pps,
                                          int gnutls_error, int sd_client) {
   if (gnutls_error != GNUTLS_E_WARNING_ALERT_RECEIVED &&
       gnutls_error != GNUTLS_E_FATAL_ALERT_RECEIVED) {
@@ -197,7 +203,8 @@ static int handle_target_handshake_error(gnutls_session_t session,
   switch (alert) {
     case GNUTLS_A_UNKNOWN_PSK_IDENTITY:
     case GNUTLS_A_BAD_RECORD_MAC:
-      send_http_msg(sd_client, HTTP_407_MSG);
+      send_http_msg(sd_client, pps->cfg->enable_proxy_basic_auth ?
+                    HTTP_407_MSG : HTTP_502_MSG);
       break;
     default:
       send_http_msg(sd_client, HTTP_502_MSG);

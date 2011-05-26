@@ -146,14 +146,18 @@ int main(int argc, char **argv) {
   cfg.accounts_path = DEFAULT_ACCOUNTS_PATH;
   cfg.accounts_inline = NULL;
   cfg.enable_passthru = 1;
+  cfg.enable_proxy_basic_auth = 1;
 
-  while ((c = getopt(argc, argv, "A:a:sLl:p:h")) != -1) {
+  while ((c = getopt(argc, argv, "A:a:BsLl:p:h")) != -1) {
     switch (c) {
       case 'A':
         cfg.accounts_path = optarg;
         break;
       case 'a':
         cfg.accounts_inline = optarg;
+        break;
+      case 'B':
+        cfg.enable_proxy_basic_auth = 0;
         break;
       case 's':
         cfg.session_cache = 1;
@@ -331,6 +335,7 @@ static void print_usage(char *argv0) {
             "(default: ~/.pakeproxy/)");
   print_opt("-a <accounts>", "Set accounts on command-line",
             "(format: \"host1,user1,pwd1|host2,user2,pwd2\")");
+  print_opt("-B      ", "Disable proxy HTTP Basic auth", "(default: enable)");
   print_opt("-s      ", "Use TLS session cache", "(default: off)");
   print_opt("-L      ", "Disable passthru of non-SRP TLS connections",
             "(default: enable)");

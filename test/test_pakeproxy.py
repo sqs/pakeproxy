@@ -9,8 +9,9 @@ ACCOUNTS_INLINE1='example.com,a,b|tls-srp.test.trustedhttp.org,user,secret'
 
 @contextmanager
 def pakeproxy(host='localhost', port=8443,
-              accounts_inline=None,
-              accounts_path=None):
+              accounts_inline='',
+              accounts_path='/dev/null',
+              disable_proxy_basic_auth=False):
     pp_env = os.getenv('pake_proxy')
     if pp_env:
         pp_env = pp_env.split(':')
@@ -19,10 +20,10 @@ def pakeproxy(host='localhost', port=8443,
     else:
         pp = {'host': host, 'port': port}
         cmd = ['src/pakeproxy']
-        if accounts_inline:
-            cmd += ['-a', accounts_inline]
-        if accounts_path:
-            cmd += ['-A', accounts_path]
+        cmd += ['-a', accounts_inline]
+        cmd += ['-A', accounts_path]
+        if disable_proxy_basic_auth:
+            cmd.append('-B')
         p = Popen(cmd, stdout=PIPE, stderr=PIPE)
     print("pakeproxy on %(host)s:%(port)d" % pp)
     try:
@@ -90,6 +91,10 @@ class TestPAKEProxy(TestCase):
         with pakeproxy(accounts_inline=ACCOUNTS_INLINE1) as pp:
             res = proxy_urlopen(pp, self.url)
             self.check_response(res)
+        with pakeproxy(disable_proxy_basic_auth=True, accounts_inline=ACCOUNTS_INLINE1) as pp:
+            res = proxy_urlopen(pp, self.url)
+            self.check_response(res)
+
 
     def test_account_file(self):
         import os
@@ -107,9 +112,13 @@ class TestPAKEProxy(TestCase):
         with pakeproxy() as pp:
             self.assertRaises(CalledProcessError, proxy_urlopen,
                               pp, self.url, proxy_user="bad:user")
+        with pakeproxy(disable_proxy_basic_auth=True) as pp:
+            self.assertRaises(CalledProcessError, proxy_urlopen,
+                              pp, self.url, proxy_user="bad:user")
+
             
     def test_proxy_authz(self):
-        with pakeproxy(accounts_path=None, accounts_inline=None) as pp:
+        with pakeproxy() as pp:
             res = proxy_urlopen(pp, self.url, proxy_user='user:secret')
             self.check_response(res)
 
