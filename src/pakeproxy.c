@@ -18,8 +18,9 @@
 #include "gnutls_support.h"
 #include "cert.h"
 
-#define DEFAULT_CA_CERT_FILE "/home/sqs/src/pakeproxy/data/ca-cert.pem"
-#define DEFAULT_CA_KEY_FILE "/home/sqs/src/pakeproxy/data/ca-key.pem"
+#define DEFAULT_CA_CERT_FILE "data/ca-cert.pem"
+#define DEFAULT_CA_KEY_FILE "data/ca-key.pem"
+#define DEFAULT_CERT_CACHE_PATH "data/tmp/"
 #define DEFAULT_CLIENT_PRIORITY "NORMAL"
 
 #define DH_BITS 1024
@@ -40,10 +41,11 @@ int main(int argc, char **argv) {
   cfg.listen_port = 8443;
   cfg.ca_cert_file = DEFAULT_CA_CERT_FILE;
   cfg.ca_key_file = DEFAULT_CA_KEY_FILE;
+  cfg.cert_cache_path = DEFAULT_CERT_CACHE_PATH;
   cfg.client_priority = DEFAULT_CLIENT_PRIORITY;
   cfg.accounts_inline = NULL;
 
-  while ((c = getopt(argc, argv, "A:a:BsLl:p:h")) != -1) {
+  while ((c = getopt(argc, argv, "a:C:K:m:l:p:h")) != -1) {
     switch (c) {
       case 'a':
         cfg.accounts_inline = optarg;
@@ -54,6 +56,14 @@ int main(int argc, char **argv) {
       case 'p':
         cfg.listen_port = atoi(optarg);
         break;
+      case 'C':
+        cfg.ca_cert_file = optarg;
+        break;
+      case 'K':
+        cfg.ca_key_file = optarg;
+        break;
+      case 'm':
+        cfg.cert_cache_path = optarg;
       case '?':
         if (isprint(optopt))
           fprintf(stderr, "Unknown option `-%c'.\n", optopt);

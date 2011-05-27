@@ -8,6 +8,7 @@ typedef struct {
   int listen_port;
   const char *ca_cert_file;
   const char *ca_key_file;
+  const char *cert_cache_path;
   const char *client_priority;
   char *accounts_inline;
 } pp_config_t;

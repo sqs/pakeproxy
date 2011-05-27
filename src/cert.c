@@ -12,7 +12,6 @@
 #define SERVER_NAME_BUFFER_SIZE 1024
 #define X509_DISPLAY_NAME_BUFFER_SIZE 1024
 #define SERIAL_BUFFER_SIZE 1024
-#define CERT_CACHE_PATH "data/tmp/"
 #define CRT_EXT "crt"
 #define KEY_EXT "key"
 
@@ -102,14 +101,14 @@ static char* filename_for_x509(char* server_name,
   char *filename;
   size_t len;
 
-  len = strlen(CERT_CACHE_PATH) + strlen(server_name)
-        + 1 + strlen(username) + 1 + strlen(ext) + 1;
+  len = strlen(cfg.cert_cache_path) + strlen("/") + strlen(server_name)
+      + strlen("_") + strlen(username) + strlen(".") + strlen(ext) + 1;
   filename = malloc(len);
   if (filename == NULL)
     err(1, "malloc filename");
 
-  snprintf(filename, len, "%s%s_%s.%s",
-           CERT_CACHE_PATH, server_name, username, ext);
+  snprintf(filename, len, "%s/%s_%s.%s",
+           cfg.cert_cache_path, server_name, username, ext);
   return filename;  
 }
 
