@@ -29,4 +29,7 @@ typedef struct {
   gnutls_x509_privkey_t key;
 } pp_ca_t;
 
+extern pp_ca_t global_ca;
+extern pp_config_t cfg;
+
 #endif // PAKEPROXY_H

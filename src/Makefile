@@ -1,5 +1,5 @@
 PRODUCT=pakeproxy
-SOURCES=pakeproxy.c cert.c conn.c misc.c accounts.c cache.c
+SOURCES=pakeproxy.c cert.c conn.c misc.c accounts.c cache.c daemon.c gnutls_support.c
 OBJS=$(SOURCES:.c=.o)
 
 LIBS=-L/usr/local/lib -lgnutls -lgnutls-extra -lpthread
