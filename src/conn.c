@@ -20,6 +20,7 @@
 #include "pakeproxy.h"
 #include "misc.h"
 #include "accounts.h"
+#include "site.h"
 
 #define MAX_BUFFER_SIZE 4096
 #define RECORD_BUFFER_SIZE MAX_BUFFER_SIZE
@@ -58,7 +59,6 @@ static int do_connect_target(gnutls_session_t* session_target,
 static int srp_cred_callback(gnutls_session_t session,
                              char** username,
                              char** password);
-static int tcp_connect(char* host, int port);
 static int do_tunnel(gnutls_session_t session_client,
                      gnutls_session_t session_target);
 static int do_passthru(gnutls_session_t session_client);
@@ -78,8 +78,8 @@ int do_proxy(gnutls_session_t session_client) {
     goto err;
   }
 
-  if ((ppsession->srp_user && ppsession->srp_passwd) ||
-      !ppsession->cfg->enable_passthru) {
+  if ((ppsession->srp_user && ppsession->srp_passwd) &&
+      site_uses_tls_srp(ppsession->target_host, ppsession->target_port)) {
     ret = do_connect_target(&session_target, ppsession);
     if (ret != GNUTLS_E_SUCCESS) {
       fprintf(stderr, "Connect to target failed: %s\n", gnutls_strerror(ret));
@@ -163,11 +163,7 @@ static int read_http_connect(int sd, pp_session_t* ppsession) {
     ret = account_lookup(ppsession);
   }
 
-  /* passthru? */
-  if (ret != 0 && ppsession->cfg->enable_passthru)
-    ret = 0;
-
-  if (ret != 0) {
+  if (ret != 0 && site_uses_tls_srp(ppsession->target_host, ppsession->target_port)) {
     if (ppsession->cfg->enable_proxy_basic_auth)
       send_http_msg(sd, HTTP_407_MSG, ppsession->target_host);
     else

@@ -45,7 +45,6 @@ int main(int argc, char **argv) {
   cfg.session_cache = 0;
   cfg.accounts_path = DEFAULT_ACCOUNTS_PATH;
   cfg.accounts_inline = NULL;
-  cfg.enable_passthru = 1;
   cfg.enable_proxy_basic_auth = 1;
 
   while ((c = getopt(argc, argv, "A:a:BsLl:p:h")) != -1) {
@@ -61,9 +60,6 @@ int main(int argc, char **argv) {
         break;
       case 's':
         cfg.session_cache = 1;
-        break;
-      case 'L':
-        cfg.enable_passthru = 0;
         break;
       case 'l':
         cfg.listen_host = optarg;
@@ -123,8 +119,6 @@ static void print_usage(char *argv0) {
             "(format: \"host1,user1,pwd1|host2,user2,pwd2\")");
   print_opt("-B      ", "Disable proxy HTTP Basic auth", "(default: enable)");
   print_opt("-s      ", "Use TLS session cache", "(default: off)");
-  print_opt("-L      ", "Disable passthru of non-SRP TLS connections",
-            "(default: enable)");
   print_opt("-l <host/ip>", "Listen address/host", "(default: 127.0.0.1)");
   print_opt("-p <port>", "Listen port", "(default: 8443)");
   print_opt("-h      ", "Show this help message", NULL);

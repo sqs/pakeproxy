@@ -12,7 +12,6 @@ typedef struct {
   int session_cache;
   const char *accounts_path;
   char *accounts_inline;
-  int enable_passthru;
   int enable_proxy_basic_auth;
 } pp_config_t;
 

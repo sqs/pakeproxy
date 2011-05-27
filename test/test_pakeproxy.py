@@ -70,7 +70,7 @@ class ProxyURLOpenThread(threading.Thread):
     
 class TestPAKEProxy(TestCase):
     url = 'https://tls-srp.test.trustedhttp.org'
-    non_tls_login_url = 'https://test.gnutls.org:5556'
+    non_tls_login_url = 'https://encrypted.google.com'
     
     def check_response(self, res):
         self.assertIn('user is: user', res.read())
@@ -81,11 +81,13 @@ class TestPAKEProxy(TestCase):
                           certinfo['issuer'])
 
     def check_non_tls_login_url_response(self, res):
-        self.assertIn('Host: test.gnutls.org:5556', res.read())
+        self.assertIn('Host: encrypted.google.com:443', res.read())
         certinfo = res.certinfo()
-        self.assertEquals('O=GnuTLS test server; CN=test.gnutls.org',
+        self.assertEquals('C=US; ST=California; L=Mountain View; '
+                          'O=Google Inc; CN=*.google.com',
                           certinfo['subject'])
-        self.assertEquals('CN=GnuTLS test CA', certinfo['issuer'])
+        self.assertEquals('C=US; O=Google Inc; CN=Google Internet Authority',
+                          certinfo['issuer'])
 
     def test_simple(self):
         with pakeproxy(accounts_inline=ACCOUNTS_INLINE1) as pp:
