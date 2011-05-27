@@ -64,6 +64,7 @@ int main(int argc, char **argv) {
         break;
       case 'm':
         cfg.cert_cache_path = optarg;
+        break;
       case '?':
         if (isprint(optopt))
           fprintf(stderr, "Unknown option `-%c'.\n", optopt);
