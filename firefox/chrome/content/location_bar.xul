@@ -4,6 +4,8 @@
          xmlns="http://www.mozilla.org/keymaster/gatekeeper/there.is.only.xul">
   <script src="ssl.js"/>
   <script src="pakeproxy.js"/>
+  <script src="proxy.js"/>
+  <script src="cacert.js"/>
   <hbox id="urlbar-icons">
     <box id="pake-identity-box" role="button" hidden="true" position="1">
       <image id="pake-identity-box-icon"/>

@@ -1,4 +1,5 @@
 content     pakeproxy    chrome/content/
+resource    pakeproxy    resource/public/
 skin pakeproxy classic/1.0 chrome/skin/
 
 overlay chrome://browser/content/browser.xul chrome://pakeproxy/content/location_bar.xul
