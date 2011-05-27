@@ -8,7 +8,6 @@
 #include <gnutls/extra.h>
 #include <gnutls/x509.h>
 
-#include "cache.h"
 #include "cert.h"
 #include "daemon.h"
 
@@ -28,12 +27,6 @@ void init_gnutls(pp_config_t *cfg) {
   ret = gnutls_priority_init(&priority_cache, cfg->client_priority, NULL);
   if (ret != GNUTLS_E_SUCCESS)
     errx(ret, "gnutls_priority_init: %s", gnutls_strerror(ret));
-
-  if (cfg->session_cache) {
-    ret = global_init_cache();
-    if (ret != GNUTLS_E_SUCCESS)
-      errx(ret, "global_init_cache: %s", gnutls_strerror(ret));
-  }
 }
 
 int initialize_tls_session(gnutls_session_t *session) {
@@ -79,14 +72,6 @@ int initialize_tls_session(gnutls_session_t *session) {
     goto err;
   }
 
-  if (cfg.session_cache) {
-    ret = session_init_cache(*session);
-    if (ret != GNUTLS_E_SUCCESS) {
-      fprintf(stderr, "session_init_cache: %s", gnutls_strerror(ret));
-      goto err;
-    }
-  }
-
 err:
   if (*session && ret != GNUTLS_E_SUCCESS)
     gnutls_deinit(*session);
@@ -95,6 +80,5 @@ err:
 
 void global_deinit() {
   gnutls_priority_deinit(priority_cache);
-  global_deinit_cache();
   gnutls_global_deinit();
 }

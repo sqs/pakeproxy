@@ -9,10 +9,7 @@ typedef struct {
   const char *ca_cert_file;
   const char *ca_key_file;
   const char *client_priority;
-  int session_cache;
-  const char *accounts_path;
   char *accounts_inline;
-  int enable_proxy_basic_auth;
 } pp_config_t;
 
 typedef struct {

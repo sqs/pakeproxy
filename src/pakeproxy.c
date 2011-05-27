@@ -20,7 +20,6 @@
 
 #define DEFAULT_CA_CERT_FILE "/home/sqs/src/pakeproxy/data/ca-cert.pem"
 #define DEFAULT_CA_KEY_FILE "/home/sqs/src/pakeproxy/data/ca-key.pem"
-#define DEFAULT_ACCOUNTS_PATH "~/.pakeproxy/"
 #define DEFAULT_CLIENT_PRIORITY "NORMAL"
 
 #define DH_BITS 1024
@@ -42,24 +41,12 @@ int main(int argc, char **argv) {
   cfg.ca_cert_file = DEFAULT_CA_CERT_FILE;
   cfg.ca_key_file = DEFAULT_CA_KEY_FILE;
   cfg.client_priority = DEFAULT_CLIENT_PRIORITY;
-  cfg.session_cache = 0;
-  cfg.accounts_path = DEFAULT_ACCOUNTS_PATH;
   cfg.accounts_inline = NULL;
-  cfg.enable_proxy_basic_auth = 1;
 
   while ((c = getopt(argc, argv, "A:a:BsLl:p:h")) != -1) {
     switch (c) {
-      case 'A':
-        cfg.accounts_path = optarg;
-        break;
       case 'a':
         cfg.accounts_inline = optarg;
-        break;
-      case 'B':
-        cfg.enable_proxy_basic_auth = 0;
-        break;
-      case 's':
-        cfg.session_cache = 1;
         break;
       case 'l':
         cfg.listen_host = optarg;
@@ -113,12 +100,8 @@ static void print_usage(char *argv0) {
   printf("Proxies HTTPS connections to TLS-SRP sites\n");
   printf("More info: http://trustedhttp.org or email <sqs@cs.stanford.edu>\n\n");
   printf("Options:\n");
-  print_opt("-A <dir>", "Set directory where account files are stored",
-            "(default: ~/.pakeproxy/)");
   print_opt("-a <accounts>", "Set accounts on command-line",
             "(format: \"host1,user1,pwd1|host2,user2,pwd2\")");
-  print_opt("-B      ", "Disable proxy HTTP Basic auth", "(default: enable)");
-  print_opt("-s      ", "Use TLS session cache", "(default: off)");
   print_opt("-l <host/ip>", "Listen address/host", "(default: 127.0.0.1)");
   print_opt("-p <port>", "Listen port", "(default: 8443)");
   print_opt("-h      ", "Show this help message", NULL);

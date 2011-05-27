@@ -137,10 +137,8 @@ static int read_http_connect(int sd, pp_session_t* ppsession) {
   }
   buf[HTTP_CONNECT_BUFFER_SIZE] = '\0';
 
-  if (ppsession->cfg->enable_proxy_basic_auth) {
-    ret = parse_proxy_authorization_header(buf, &ppsession->srp_user,
-                                           &ppsession->srp_passwd);
-  }
+  ret = parse_proxy_authorization_header(buf, &ppsession->srp_user,
+                                         &ppsession->srp_passwd);
 
   buf[sizeof(buf)-1] = '\0';
   // printf("recv %u bytes: <<<%s>>>\n", total_len, buf);
@@ -164,10 +162,7 @@ static int read_http_connect(int sd, pp_session_t* ppsession) {
   }
 
   if (ret != 0 && site_uses_tls_srp(ppsession->target_host, ppsession->target_port)) {
-    if (ppsession->cfg->enable_proxy_basic_auth)
-      send_http_msg(sd, HTTP_407_MSG, ppsession->target_host);
-    else
-      send_http_msg(sd, HTTP_502_MSG, NULL);
+    send_http_msg(sd, HTTP_407_MSG, ppsession->target_host);
     return -1;
   }
 
@@ -215,11 +210,7 @@ static int handle_target_handshake_error(gnutls_session_t session,
   switch (alert) {
     case GNUTLS_A_UNKNOWN_PSK_IDENTITY:
     case GNUTLS_A_BAD_RECORD_MAC:
-      if (pps->cfg->enable_proxy_basic_auth) {
-        send_http_msg(sd_client, HTTP_407_MSG, pps->target_host);
-      } else {
-        send_http_msg(sd_client, HTTP_502_MSG, NULL);
-      }
+      send_http_msg(sd_client, HTTP_407_MSG, pps->target_host);
       break;
     default:
       send_http_msg(sd_client, HTTP_502_MSG, NULL);

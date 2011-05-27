@@ -8,16 +8,11 @@
 #define ACCOUNT_BUFFER_SIZE 1024
 
 static int account_inline_lookup(pp_session_t* ppsession);
-static int account_file_lookup(pp_session_t* ppsession);
 
 int account_lookup(pp_session_t* ppsession) {
   int ret;
 
   ret = account_inline_lookup(ppsession);
-  if (ret == 0)
-    return 0;
-
-  ret = account_file_lookup(ppsession);
   if (ret == 0)
     return 0;
 
@@ -74,49 +69,4 @@ static int account_inline_lookup(pp_session_t* ppsession) {
 done:
   free(tmp);
   return ret;
-}
-
-static int account_file_lookup(pp_session_t* pps) {
-  pp_config_t *cfg = pps->cfg;
-  char fname[ACCOUNT_FILENAME_BUFFER_SIZE];
-  char buf[ACCOUNT_BUFFER_SIZE+1];
-  char *tmp;
-  size_t len;
-  FILE *f;
-
-  snprintf(fname, ACCOUNT_FILENAME_BUFFER_SIZE, "%s/%s",
-           cfg->accounts_path, pps->target_host);
-
-  if (fname[0] == '~') {
-    char* home = getenv("HOME");
-    int n = strlen(fname) + strlen(home);
-    char *fnametmp = (char*)malloc(n*sizeof(char));
-    sprintf(fnametmp, "%s%s", home, fname+1);
-    f = fopen(fnametmp, "r");
-    free(fnametmp);
-  } else {
-    f = fopen(fname, "r");
-  }
-  
-  if (f == NULL)
-    return -1;
-
-  len = fread(buf, 1, ACCOUNT_BUFFER_SIZE, f);
-  fclose(f);
-  buf[len] = '\0';
-
-  tmp = strchr(buf, ',');
-  if (tmp == NULL)
-    return -1;
-
-  *tmp = '\0';
-  pps->srp_user = strdup(buf);
-  pps->srp_passwd = strdup((char*)tmp + 1);
-
-  /* if last passwd char is newline, assume user accidentally left whitespace */
-  if (pps->srp_passwd[strlen(pps->srp_passwd)-1] == '\n')
-    pps->srp_passwd[strlen(pps->srp_passwd)-1] = '\0';
-  
-  fprintf(stderr, "-   Auth: file '%s'/'%s'\n", pps->srp_user, pps->srp_passwd);
-  return 0;
 }

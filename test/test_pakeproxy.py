@@ -9,9 +9,7 @@ ACCOUNTS_INLINE1='example.com,a,b|tls-srp.test.trustedhttp.org,user,secret'
 
 @contextmanager
 def pakeproxy(host='localhost', port=8443,
-              accounts_inline='',
-              accounts_path='/dev/null',
-              disable_proxy_basic_auth=False):
+              accounts_inline=''):
     pp_env = os.getenv('pake_proxy')
     if pp_env:
         pp_env = pp_env.split(':')
@@ -21,9 +19,6 @@ def pakeproxy(host='localhost', port=8443,
         pp = {'host': host, 'port': port}
         cmd = ['src/pakeproxy']
         cmd += ['-a', accounts_inline]
-        cmd += ['-A', accounts_path]
-        if disable_proxy_basic_auth:
-            cmd.append('-B')
         p = Popen(cmd, stdout=PIPE, stderr=PIPE)
     print("pakeproxy on %(host)s:%(port)d" % pp)
     try:
@@ -65,7 +60,7 @@ class ProxyURLOpenThread(threading.Thread):
         self.test = test
 
     def run(self):
-        res = proxy_urlopen(self.pakeproxy, self.url)
+        res = proxy_urlopen(self.pakeproxy, self.url, proxy_user='user:secret')
         TestPAKEProxy.check_response(self.test, res)
     
 class TestPAKEProxy(TestCase):
@@ -89,24 +84,8 @@ class TestPAKEProxy(TestCase):
         self.assertEquals('C=US; O=Google Inc; CN=Google Internet Authority',
                           certinfo['issuer'])
 
-    def test_simple(self):
+    def test_simple_inline(self):
         with pakeproxy(accounts_inline=ACCOUNTS_INLINE1) as pp:
-            res = proxy_urlopen(pp, self.url)
-            self.check_response(res)
-        with pakeproxy(disable_proxy_basic_auth=True, accounts_inline=ACCOUNTS_INLINE1) as pp:
-            res = proxy_urlopen(pp, self.url)
-            self.check_response(res)
-
-
-    def test_account_file(self):
-        import os
-        acctpath = '/tmp/pakeproxy_tmp/'
-        acctfile = acctpath + 'tls-srp.test.trustedhttp.org'
-        if not os.path.exists(acctpath):
-            os.mkdir(acctpath)
-        with open(acctfile, 'w') as f:
-            f.write('user,secret')
-        with pakeproxy(accounts_path=acctpath) as pp:
             res = proxy_urlopen(pp, self.url)
             self.check_response(res)
 
@@ -114,11 +93,16 @@ class TestPAKEProxy(TestCase):
         with pakeproxy() as pp:
             self.assertRaises(CalledProcessError, proxy_urlopen,
                               pp, self.url, proxy_user="bad:user")
-        with pakeproxy(disable_proxy_basic_auth=True) as pp:
+        with pakeproxy(accounts_inline='tls-srp.test.trustedhttp.org,bad,user') as pp:
             self.assertRaises(CalledProcessError, proxy_urlopen,
-                              pp, self.url, proxy_user="bad:user")
+                              pp, self.url)
 
-            
+    def test_noauth_failure(self):
+        with pakeproxy() as pp:
+            self.assertRaises(CalledProcessError, proxy_urlopen,
+                              pp, self.url)
+
+
     def test_proxy_authz(self):
         with pakeproxy() as pp:
             res = proxy_urlopen(pp, self.url, proxy_user='user:secret')
