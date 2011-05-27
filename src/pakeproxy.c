@@ -16,6 +16,7 @@
 #include "misc.h"
 #include "daemon.h"
 #include "gnutls_support.h"
+#include "cert.h"
 
 #define DEFAULT_CA_CERT_FILE "/home/sqs/src/pakeproxy/data/ca-cert.pem"
 #define DEFAULT_CA_KEY_FILE "/home/sqs/src/pakeproxy/data/ca-key.pem"
