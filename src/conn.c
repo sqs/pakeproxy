@@ -34,7 +34,7 @@ static const char *HTTP_407_MSG =
     "Server: PAKEProxy\r\n"
     "Content-Length: 4\r\n"
     "Content-Type: text/plain\r\n"
-    "Proxy-Authenticate: Basic realm=\"PAKEProxy\"\r\n"
+    "Proxy-Authenticate: Basic realm=\"%s\"\r\n"
     "Connection: close\r\n"
     "\r\n"
     "auth";
@@ -49,7 +49,7 @@ static const char *HTTP_502_MSG =
     "502 Bad Gateway";
 
 static int read_http_connect(int sd, pp_session_t* ppsession);
-static int send_http_msg(int sd, const char *msg);
+static int send_http_msg(int sd, const char *msg, const char *realm);
 static int handle_target_handshake_error(gnutls_session_t session, pp_session_t *pps,
                                          int gnutls_error, int sd_client);
 static int parse_proxy_authorization_header(char* buf, char** user, char** passwd);
@@ -87,7 +87,7 @@ int do_proxy(gnutls_session_t session_client) {
       goto err;
     }
 
-    send_http_msg(sd_client, HTTP_200_MSG);
+    send_http_msg(sd_client, HTTP_200_MSG, NULL);
     ret = gnutls_handshake(session_client);
     if (ret != GNUTLS_E_SUCCESS) {
       fprintf(stderr, "Client handshake failed: %s\n", gnutls_strerror(ret));
@@ -100,7 +100,7 @@ int do_proxy(gnutls_session_t session_client) {
       goto err;
     }
   } else {
-    send_http_msg(sd_client, HTTP_200_MSG);
+    send_http_msg(sd_client, HTTP_200_MSG, NULL);
     ret = do_passthru(session_client);
     if (ret != GNUTLS_E_SUCCESS) {
       fprintf(stderr, "Passthru failed: %s\n", gnutls_strerror(ret));
@@ -169,20 +169,36 @@ static int read_http_connect(int sd, pp_session_t* ppsession) {
 
   if (ret != 0) {
     if (ppsession->cfg->enable_proxy_basic_auth)
-      send_http_msg(sd, HTTP_407_MSG);
+      send_http_msg(sd, HTTP_407_MSG, ppsession->target_host);
     else
-      send_http_msg(sd, HTTP_502_MSG);
+      send_http_msg(sd, HTTP_502_MSG, NULL);
     return -1;
   }
 
   return 0;
 }
 
-static int send_http_msg(int sd, const char *msg) {
+static int send_http_msg(int sd, const char *msg, const char *realm) {
   ssize_t len;
+  char *allocmsg = NULL;
+
+  if (realm != NULL && msg == HTTP_407_MSG) {
+    /* HTTP_407_MSG is actually a format string with a %s for the realm */
+    size_t alloclen = strlen(msg) - strlen("%s") + strlen(realm) + 1;
+    allocmsg = malloc(alloclen);
+    if (allocmsg == NULL)
+      errx(1, "malloc allocmsg");
+    snprintf(allocmsg, alloclen, msg, realm);
+    msg = allocmsg;
+  }
+
   len = send(sd, msg, strlen(msg), 0);
   if (len != strlen(msg))
     err(1, "send_http_msg");
+
+  if (allocmsg != NULL)
+    free(allocmsg);
+
   return 0;
 }
 
@@ -203,11 +219,14 @@ static int handle_target_handshake_error(gnutls_session_t session,
   switch (alert) {
     case GNUTLS_A_UNKNOWN_PSK_IDENTITY:
     case GNUTLS_A_BAD_RECORD_MAC:
-      send_http_msg(sd_client, pps->cfg->enable_proxy_basic_auth ?
-                    HTTP_407_MSG : HTTP_502_MSG);
+      if (pps->cfg->enable_proxy_basic_auth) {
+        send_http_msg(sd_client, HTTP_407_MSG, pps->target_host);
+      } else {
+        send_http_msg(sd_client, HTTP_502_MSG, NULL);
+      }
       break;
     default:
-      send_http_msg(sd_client, HTTP_502_MSG);
+      send_http_msg(sd_client, HTTP_502_MSG, NULL);
       break;
   }
 
