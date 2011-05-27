@@ -108,7 +108,7 @@ static void print_opt(char *opt, char *desc, char *more) {
   static const char *pad = "  ";
   printf("  %s\t%s\n", opt, desc);
   if (more)
-    printf("  %*s\t%s\n", strlen(opt), pad, more);
+    printf("  %*s\t%s\n", (int)strlen(opt), pad, more);
   printf("\n");
 }
 
