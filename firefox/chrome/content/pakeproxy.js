@@ -16,7 +16,7 @@ var process = {
       return;
 
     AddonManager.getAddonByID("pakeproxy@trustedhttp.org", function(addon) {
-      var file = addon.getResourceURI("../src/pakeproxy")
+      var file = addon.getResourceURI("resource/pakeproxy")
         .QueryInterface(Components.interfaces.nsIFileURL).file;
       if (file.exists()) {
         process.instance = Components.classes['@mozilla.org/process/util;1']
