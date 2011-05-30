@@ -44,7 +44,6 @@ var process = {
   },
 
   observe: function(subject, topic, data) {
-    dlog("OBSERVE " + topic);
     if (topic == "quit-application-requested")
       pakeproxyProcess.kill();
   }
@@ -85,7 +84,6 @@ var tabListener = {
     var label = document.getElementById("pake-identity-name");
     var box = document.getElementById("pake-identity-box");
     label.value = name;
-    label.tooltiptext = "Hello";
     box.hidden = (name == "");
   }
 
