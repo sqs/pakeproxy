@@ -15,7 +15,7 @@ clean:
 distpkg: xpi
 
 xpi: certs
-	rm pakeproxy.xpi
+	rm pakeproxy.xpi || echo
 	make -C src clean
 	make -C src static
 	cd firefox && make && cd ..
