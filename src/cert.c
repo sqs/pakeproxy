@@ -311,6 +311,7 @@ static gnutls_datum_t load_file(const char *file) {
 
   loaded_file.data = ptr;
   loaded_file.size = (unsigned int)filelen;
+  fclose(f);
   return loaded_file;
 }
 
