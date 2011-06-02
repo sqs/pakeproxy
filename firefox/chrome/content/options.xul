@@ -1,0 +1,25 @@
+<?xml version="1.0"?>
+<?xml-stylesheet href="chrome://global/skin/" type="text/css"?>
+ 
+<prefwindow id="pakeproxy-prefs"
+     title="PAKEProxy Options"
+     xmlns="http://www.mozilla.org/keymaster/gatekeeper/there.is.only.xul">
+ 
+<prefpane id="pakeproxy-pane" label="General Settings">
+  <preferences>
+    <preference id="pref_launch_pakeproxy_process" name="pakeproxy.launch_pakeproxy_process" type="bool"/>
+    <preference id="pref_https_proxy_enabled" name="pakeproxy.https_proxy_enabled" type="bool"/>
+  </preferences>
+ 
+  <hbox align="left">
+    <label control="launch_pakeproxy_process" value="Launch PAKEProxy process in Firefox"/>
+    <checkbox preference="pref_launch_pakeproxy_process" id="launch_pakeproxy_process"/>
+  </hbox>
+
+  <hbox align="left">
+    <label control="https_proxy_enabled" value="Set PAKEProxy as Firefox HTTPS proxy"/>
+    <checkbox preference="pref_https_proxy_enabled" id="https_proxy_enabled"/>
+  </hbox>
+</prefpane>
+ 
+</prefwindow>

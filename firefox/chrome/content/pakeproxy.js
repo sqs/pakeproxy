@@ -2,40 +2,90 @@ var nsIHttpActivityObserver = Components.interfaces.nsIHttpActivityObserver;
 var nsISocketTransport = Components.interfaces.nsISocketTransport;
 Components.utils.import("resource://gre/modules/AddonManager.jsm");
 
-var USE_EXISTING_PAKEPROXY = false;
-
 function dlog(s) {
   dump(s + "\n");
 }
+
+var pakeproxy = {
+  prefs: [],
+  prefsvc: null,
+  startup: function() {
+    this.prefsvc = Components.classes["@mozilla.org/preferences-service;1"]
+         .getService(Components.interfaces.nsIPrefService)
+         .getBranch("pakeproxy.");
+    this.prefsvc.QueryInterface(Components.interfaces.nsIPrefBranch2);
+    this.prefsvc.addObserver("", this, false);
+    
+    // set these so we trigger their enabled actions
+    this.prefs['launch_pakeproxy_process'] = false;
+    this.observe(null, "nsPref:changed", "launch_pakeproxy_process");
+    this.prefs['https_proxy_enabled'] = false;
+    this.observe(null, "nsPref:changed", "https_proxy_enabled");
+  },
+
+  shutdown: function() {
+    this.prefsvc.removeObserver("", this);
+  },
+
+  observe: function(subject, topic, data) {
+    if (topic != "nsPref:changed")
+      return;
+    
+    switch (data) {
+    case "launch_pakeproxy_process":
+      this.prefDidChange("launch_pakeproxy_process", process.run, process.kill);
+      break;
+    case "https_proxy_enabled":
+      this.prefDidChange("https_proxy_enabled",
+                         function() { pakeproxyFilter.setFilter(true); },
+                         function() { pakeproxyFilter.setFilter(false); }
+                        );
+      break;
+    }
+  },
+
+  prefDidChange: function(key, fEnabled, fDisabled) {
+    var newVal = this.prefsvc.getBoolPref(key);
+    var oldVal = this.prefs[key];
+    this.prefs[key] = newVal;
+    if (newVal != oldVal) {
+      if (newVal == true) {
+        fEnabled();
+      } else {
+        fDisabled();
+      }
+    }
+  }
+};
 
 var process = {
   instance: null,
   
   run: function() {
-    if (USE_EXISTING_PAKEPROXY)
-      return;
+    if (process.instance == null) {
+      AddonManager.getAddonByID("pakeproxy@trustedhttp.org", function(addon) {
+        var file = addon.getResourceURI("resource/pakeproxy")
+          .QueryInterface(Components.interfaces.nsIFileURL).file;
+        if (file.exists()) {
+          process.instance = Components.classes['@mozilla.org/process/util;1']
+            .getService(Components.interfaces.nsIProcess);
+          process.instance.init(file);
 
-    AddonManager.getAddonByID("pakeproxy@trustedhttp.org", function(addon) {
-      var file = addon.getResourceURI("resource/pakeproxy")
-        .QueryInterface(Components.interfaces.nsIFileURL).file;
-      if (file.exists()) {
-        process.instance = Components.classes['@mozilla.org/process/util;1']
-          .getService(Components.interfaces.nsIProcess);
-        process.instance.init(file);
-
-        var caCert = addon.getResourceURI("resource/public/ca-cert.pem").path;
-        var caKey = addon.getResourceURI("resource/ca-key.pem").path;
-        var certCache = addon.getResourceURI("resource/tmp").path;
-        certCache = certCache.substring(0, certCache.length-1);
-        var args = ['-C', caCert, '-K', caKey, '-m', certCache];
-        
-        process.instance.run(false, args, args.length);
-        window.setTimeout(function() {
-          dlog("Reloading page after pakeproxy had time to start...");
-          gBrowser.reload();
-        }, 150);
-      }
-    });
+          var caCert = addon.getResourceURI("resource/public/ca-cert.pem").path;
+          var caKey = addon.getResourceURI("resource/ca-key.pem").path;
+          var certCache = addon.getResourceURI("resource/tmp").path;
+          certCache = certCache.substring(0, certCache.length-1);
+          process.args = ['-C', caCert, '-K', caKey, '-m', certCache];
+          process.run();
+        } else alert("Can't find PAKEProxy executable at " + file.path);
+      });
+    } else {      
+      process.instance.run(false, process.args, process.args.length);
+      window.setTimeout(function() {
+        dlog("Reloading page after pakeproxy had time to start...");
+        gBrowser.reload();
+      }, 150);
+    }
   },
 
   kill: function() {
@@ -45,7 +95,7 @@ var process = {
 
   observe: function(subject, topic, data) {
     if (topic == "quit-application-requested")
-      pakeproxyProcess.kill();
+      process.kill();
   }
 };
 
@@ -91,13 +141,14 @@ var tabListener = {
 
 window.addEventListener("load", function() {
   var container = gBrowser.tabContainer;
-  process.run();
+  pakeproxy.startup();
   gBrowser.addTabsProgressListener(tabListener);
   container.addEventListener("TabSelect", tabListener.onTabSelected, false);
 }, false);
 
 window.addEventListener("unload", function() {
   var container = gBrowser.tabContainer;
+  pakeproxy.shutdown();
   gBrowser.removeTabsProgressListener(tabListener);
   container.removeEventListener("TabSelect", tabListener.onTabSelected, false);
 }, false);

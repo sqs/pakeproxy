@@ -24,4 +24,3 @@ PAKEProxyFilter.prototype = {
 }
 
 pakeproxyFilter = new PAKEProxyFilter();
-pakeproxyFilter.setFilter(true);

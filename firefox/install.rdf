@@ -8,6 +8,7 @@
     <em:version>1.0</em:version>
     <em:type>2</em:type>
     <em:unpack>true</em:unpack>
+    <em:optionsURL>chrome://pakeproxy/content/options.xul</em:optionsURL>
    
     <!-- Target Application this extension can install into, 
          with minimum and maximum supported versions. --> 
