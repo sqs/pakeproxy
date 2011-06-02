@@ -333,17 +333,21 @@ int tcp_connect(char* host, int port) {
   sa.sin_port = htons(port);
 
   hp = gethostbyname(host);
-  if (hp == NULL)
-    errx(1, "gethostbyname error");
+  if (hp == NULL) {
+    fprintf(stderr, "- gethostbyname error on %s\n", host);
+    return -1;
+  }
 
-  if (hp->h_addr_list[0] == NULL)
-    errx(1, "gethostbyname empty h_addr_list");
+  if (hp->h_addr_list[0] == NULL) {
+    fprintf(stderr, "gethostbyname empty h_addr_list on %s\n", host);
+    return -1;
+  }
   sa.sin_addr = *(struct in_addr *)hp->h_addr_list[0];
 
   err = connect(sd, (struct sockaddr *)&sa, sizeof(sa));
   if (err < 0) {
-    fprintf(stderr, "Connect error\n");
-    exit(1);
+    fprintf(stderr, "- Connect error to %s\n", host);
+    return -1;
   }
 
   return sd;
@@ -487,14 +491,19 @@ static int do_passthru(gnutls_session_t session_client) {
       if (ret == 0) {
         client_closed = 1;
         fprintf(stderr, "- Client has closed the passthru connection\n");
-        break;
       } else if (ret == -1) {
-        err(1, "passthru read from client");
+        client_closed = 1;
+        fprintf(stderr, "- Passthru read from client error\n");
       } else if (ret > 0) {
         ret = send(sd_target, buffer, ret, 0);
-        if (ret == -1)
-          err(1, "passthru send to target");
+        if (ret == -1) {
+          client_closed = 1;
+          fprintf(stderr, "- Passthru send to target error\n");
+        }
       }
+
+      if (client_closed)
+        break;
     }
 
     /* SEND FROM TARGET TO CLIENT */
@@ -504,14 +513,19 @@ static int do_passthru(gnutls_session_t session_client) {
       if (ret == 0) {
         target_closed = 1;
         fprintf(stderr, "- Target has closed the passthru connection\n");
-        break;
       } else if (ret == -1) {
-        err(1, "passthru read from target");
+        target_closed = 1;
+        fprintf(stderr, "- Passthru read from target error\n");
       } else if (ret > 0) {
         ret = send(sd_client, buffer, ret, 0);
-        if (ret == -1)
-          err(1, "passthru send to client");
+        if (ret == -1) {
+          target_closed = 1;
+          fprintf(stderr, "- Passthru send to client error\n");
+        }
       }
+
+      if (target_closed)
+        break;
     }
   }
 

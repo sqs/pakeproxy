@@ -65,7 +65,7 @@ class ProxyURLOpenThread(threading.Thread):
     
 class TestPAKEProxy(TestCase):
     url = 'https://tls-srp.test.trustedhttp.org'
-    non_tls_login_url = 'https://encrypted.google.com'
+    non_tls_login_urls = ['https://encrypted.google.com']
     
     def check_response(self, res):
         self.assertIn('user is: user', res.read())
@@ -119,6 +119,7 @@ class TestPAKEProxy(TestCase):
                 t.join()
                   
     def test_passthru(self):
-        with pakeproxy() as pp:
-            res = proxy_urlopen(pp, self.non_tls_login_url)
-            self.check_non_tls_login_url_response(res)
+        for non_tls_login_url in self.non_tls_login_urls:
+            with pakeproxy() as pp:
+                res = proxy_urlopen(pp, non_tls_login_url)
+                self.check_non_tls_login_url_response(res)
