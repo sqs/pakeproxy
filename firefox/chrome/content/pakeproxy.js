@@ -125,7 +125,6 @@ var tabListener = {
   },
 
   _setIdentity: function(name, host) {
-    httpRequestObserver.currentTLSLoginHost = host;
     this._setIdentityLabel(name);
   },
 
