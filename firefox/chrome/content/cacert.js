@@ -24,9 +24,7 @@ function importRootCert() {
     var certData = getContents("resource://pakeproxy/ca-cert.pem");
     certData = certData.replace("-----BEGIN CERTIFICATE-----\n", "")
         .replace("-----END CERTIFICATE-----", "").replace(/\n/g,"");
-    dlog(certData);
     var c    = certdb.constructX509FromBase64(certData);
-    dlog(c);
 
     var certCache =
         Components.classes["@mozilla.org/security/nsscertcache;1"]
@@ -59,5 +57,4 @@ function importRootCert() {
 
 window.addEventListener("load", function() {
     importRootCert();
-    dlog("________________");
 }, false);
