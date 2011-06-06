@@ -56,5 +56,5 @@ function importRootCert() {
 }
 
 window.addEventListener("load", function() {
-    importRootCert();
+  setTimeout(importRootCert, 500);
 }, false);
