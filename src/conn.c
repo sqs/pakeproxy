@@ -35,7 +35,7 @@ static const char *HTTP_407_MSG =
     "Server: PAKEProxy\r\n"
     "Content-Length: 4\r\n"
     "Content-Type: text/plain\r\n"
-    "Proxy-Authenticate: Basic realm=\"%s\"\r\n"
+    "Proxy-Authenticate: Basic realm=\"%s (TLS-SRP via PAKEProxy)\"\r\n"
     "Connection: close\r\n"
     "\r\n"
     "auth";

@@ -33,10 +33,8 @@ int site_uses_tls_srp(char *host, int port) {
   ret = gnutls_handshake(session);
 
   if (ret >= 0) { /* handshake success */
-    fprintf(stderr, "Handshake SUCCESS\n");
     ret = 1;
   } else if (ret < 0) { /* handshake error */
-    fprintf(stderr, "Handshake FAILURE: %s %d\n", gnutls_strerror(ret), ret);
     if (ret == GNUTLS_E_UNKNOWN_SRP_USERNAME ||
         ret == GNUTLS_E_DECRYPTION_FAILED) {
       ret = 1;
