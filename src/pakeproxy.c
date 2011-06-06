@@ -17,6 +17,7 @@
 #include "daemon.h"
 #include "gnutls_support.h"
 #include "cert.h"
+#include "site.h"
 
 #define DEFAULT_CA_CERT_FILE "data/ca-cert.pem"
 #define DEFAULT_CA_KEY_FILE "data/ca-key.pem"
@@ -44,8 +45,11 @@ int main(int argc, char **argv) {
   cfg.cert_cache_path = DEFAULT_CERT_CACHE_PATH;
   cfg.client_priority = DEFAULT_CLIENT_PRIORITY;
   cfg.accounts_inline = NULL;
+  
+  int detect_only = 0;
+  char *detect_host = NULL;
 
-  while ((c = getopt(argc, argv, "a:C:K:m:l:p:h")) != -1) {
+  while ((c = getopt(argc, argv, "a:C:D:K:m:l:p:h")) != -1) {
     switch (c) {
       case 'a':
         cfg.accounts_inline = optarg;
@@ -65,6 +69,10 @@ int main(int argc, char **argv) {
       case 'm':
         cfg.cert_cache_path = optarg;
         break;
+      case 'D':
+        detect_only = 1;
+        detect_host = optarg;
+        break;
       case '?':
         if (isprint(optopt))
           fprintf(stderr, "Unknown option `-%c'.\n", optopt);
@@ -82,6 +90,11 @@ int main(int argc, char **argv) {
   init_gnutls(&cfg);
   load_ca_cert_and_key(&global_ca, cfg.ca_cert_file, cfg.ca_key_file);
   srand(time(NULL));
+
+  if (detect_only) {
+    fprintf(stderr, "Detecting whether %s:443 supports TLS-SRP...\n", detect_host);
+    return site_uses_tls_srp(detect_host, 443) != 1; /* returncode 0 is success */
+  }
 
   listen_sd = open_listen_socket(cfg.listen_host, cfg.listen_port);
   if (listen_sd == -1)
@@ -115,5 +128,6 @@ static void print_usage(char *argv0) {
             "(format: \"host1,user1,pwd1|host2,user2,pwd2\")");
   print_opt("-l <host/ip>", "Listen address/host", "(default: 127.0.0.1)");
   print_opt("-p <port>", "Listen port", "(default: 8443)");
+  print_opt("-D <host>", "Detect whether a host supports TLS-SRP; then exit", NULL);
   print_opt("-h      ", "Show this help message", NULL);
 }

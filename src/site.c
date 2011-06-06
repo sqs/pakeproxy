@@ -10,6 +10,7 @@
 
 #define MAX_BUF 1024
 
+/* Returns 1 if the host supports TLS-SRP, and 0 otherwise. */
 int site_uses_tls_srp(char *host, int port) {
   int ret;
   int sd;
@@ -31,12 +32,17 @@ int site_uses_tls_srp(char *host, int port) {
 
   ret = gnutls_handshake(session);
 
-  if (ret >= 0)
-    ret = 1; /* success */
-  if (gnutls_alert_get(session) == GNUTLS_A_HANDSHAKE_FAILURE) {
-    ret = 0;
-  } else {
+  if (ret >= 0) { /* handshake success */
+    fprintf(stderr, "Handshake SUCCESS\n");
     ret = 1;
+  } else if (ret < 0) { /* handshake error */
+    fprintf(stderr, "Handshake FAILURE: %s %d\n", gnutls_strerror(ret), ret);
+    if (ret == GNUTLS_E_UNKNOWN_SRP_USERNAME ||
+        ret == GNUTLS_E_DECRYPTION_FAILED) {
+      ret = 1;
+    } else {
+      ret = 0;
+    }
   }
 
   printf("- Host %s TLS-SRP support: %s (%s)\n", host, ret ? "YES" : "NO", gnutls_alert_get_name(gnutls_alert_get(session)));

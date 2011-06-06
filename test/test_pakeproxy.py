@@ -1,5 +1,6 @@
-from subprocess import Popen, PIPE, STDOUT, check_output, CalledProcessError
+from subprocess import Popen, PIPE, STDOUT, check_output, CalledProcessError, check_call
 from unittest import TestCase
+from nose.plugins.attrib import attr
 from contextlib import contextmanager
 import threading
 import urllib2, os, re
@@ -123,3 +124,20 @@ class TestPAKEProxy(TestCase):
             with pakeproxy() as pp:
                 res = proxy_urlopen(pp, non_tls_login_url)
                 self.check_non_tls_login_url_response(res)
+
+    def __detect_tls_srp(self, host):
+        try:
+            cmd = ['src/pakeproxy', '-D', host]
+            check_call(cmd, stdout=PIPE, stderr=PIPE)
+            return True
+        except CalledProcessError as e:
+            return False
+
+    @attr('detect')
+    def test_detect_tls_srp(self):
+        self.assertTrue(self.__detect_tls_srp('tls-srp.test.trustedhttp.org'))
+        self.assertFalse(self.__detect_tls_srp('chaseonline.chase.com'))
+        self.assertFalse(self.__detect_tls_srp('www.stanford.edu'))
+
+
+
