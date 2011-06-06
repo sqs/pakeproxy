@@ -4,7 +4,7 @@ OBJS=$(SOURCES:.c=.o)
 
 LIBS=-L/usr/local/lib -lgnutls -lgnutls-extra -lpthread
 LIBS_STATIC = $(LIBS) -ltasn1 -lnettle -lz -ldl -lhogweed -lgmp
-LIBS_STATIC_MACOSX = /opt/local/lib/libgnutls.a /opt/local/lib/libgnutls-extra.a /opt/local/lib/libtasn1.a /opt/local/lib/libgcrypt.a /opt/local/lib/libintl.a /opt/local/lib/libiconv.a /opt/local/lib/liblzo2.a /usr/local/lib/libgpg-error.a -lz -ldl /System/Library/Frameworks/CoreFoundation.framework/CoreFoundation
+LIBS_STATIC_MACOSX = /opt/local/lib/libgnutls.a /opt/local/lib/libgnutls-extra.a /opt/local/lib/libtasn1.a /opt/local/lib/libgcrypt.a /opt/local/lib/libintl.a /opt/local/lib/libiconv.a /opt/local/lib/liblzo2.a /usr/local/lib/libgpg-error.a -lz -ldl -framework CoreFoundation
 
 CC=gcc
 CFLAGS+=-Wall -g
