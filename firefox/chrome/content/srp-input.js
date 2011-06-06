@@ -22,6 +22,7 @@ function srp_form_submit(button) {
   var srpv = sjcl.codec.base64.fromBits(verifier.toBits());
   
   button.value = "Finished";
+  button.disabled = false;
 
   // Fill in forms on page
   var inputs = gBrowser.contentDocument.getElementsByTagName('input');
