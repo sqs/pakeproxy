@@ -71,9 +71,9 @@ var process = {
             .getService(Components.interfaces.nsIProcess);
           process.instance.init(file);
 
-          var caCert = addon.getResourceURI("resource/public/ca-cert.pem").path;
-          var caKey = addon.getResourceURI("resource/ca-key.pem").path;
-          var certCache = addon.getResourceURI("resource/tmp").path;
+          var caCert = decodeURI(addon.getResourceURI("resource/public/ca-cert.pem").path);
+          var caKey = decodeURI(addon.getResourceURI("resource/ca-key.pem").path);
+          var certCache = decodeURI(addon.getResourceURI("resource/tmp").path);
           certCache = certCache.substring(0, certCache.length-1);
           process.args = ['-C', caCert, '-K', caKey, '-m', certCache];
           process.run();
