@@ -6,10 +6,28 @@
   <script src="pakeproxy.js"/>
   <script src="proxy.js"/>
   <script src="cacert.js"/>
+  <script src="resource://pakeproxy/sjcl.js"/>
+  <script src="srp-input.js"/>
   <hbox id="urlbar-icons">
-    <box id="pake-identity-box" role="button" hidden="true" position="1">
+    <box class="pake-box" id="srp-input-box" role="button" hidden="true" position="0" onclick="srpInputListener.onClick()">
+      <image id="srp-input-icon"/>
+      <hbox class="pake-labels" id="srp-input-label-box">
+        <label id="srp-input-label">New SRP account</label>
+      </hbox>
+      <panel id="srp-input-panel">
+          <label control="srp_username" value="Username:"/>
+          <textbox id="srp_username" size="12"/>
+          <spacer/>
+          <label control="srp_password" value="Password:"/>
+          <textbox id="srp_password" size="12"/>
+          <spacer/>
+          <description id="srp_firebug_warning" hidden="true">Warning: Firebug slows down Javascript by 10x. If you don't disable Firebug, this operation may take 30 sec.</description>
+          <button id="srp_submit" label="Fill in fields" onclick="srp_form_submit(this)"/>
+      </panel>
+    </box>
+    <box class="pake-box" id="pake-identity-box" role="button" hidden="true" position="1">
       <image id="pake-identity-box-icon"/>
-      <hbox id="pake-identity-labels">
+      <hbox class="pake-labels" id="pake-identity-labels">
         <label id="pake-identity-name"/>
       </hbox>
     </box>

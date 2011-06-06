@@ -1,25 +1,29 @@
-#pake-identity-box {
+.pake-box {
   height:14px;
-  background-color: #e8f1fc;
-  /*background-image: -moz-linear-gradient(rgba(170,170,170,.25), rgba(0,0,0,.3));*/
-  /*box-shadow: 0 0 0 1px rgba(0,0,0,.1) inset;*/
-  border: solid 1px #8cb2de;
   border-radius: 3px;
   -moz-padding-start: 2px;
   -moz-padding-end: 2px;
   -moz-margin-end: 3px;
+  border: solid 1px red;
+
 }
 
-#pake-identity-box:-moz-focusring {
+#pake-identity-box {
+  background-color: #e8f1fc;
+  border-color:#8cb2de;
+}
+
+#srp-input-box {
+  background-color: #29da2d;
+  border-color:#2f8231;
+}
+
+.pake-box:-moz-focusring {
   outline: 1px dotted -moz-DialogText;
 }
 
-/*
-#pake-identity-box:hover:active,
-#pake-identity-box[open="true"] {
-  background-image: -moz-linear-gradient(rgba(0,0,0,.4), rgba(0,0,0,.1));
-}
-*/
+
+
 
 #pake-identity-box-icon {
   height: 16px;
@@ -27,9 +31,43 @@
   width: 18px;
 }
 
-#pake-identity-labels {
+#srp-input-icon {
+  height: 18px;
+  list-style-image: url(chrome://pakeproxy/skin/new-account.png);
+  width: 20px;
+}
+
+
+.pake-labels {
   font-size:0.9em;
   margin-left:-4px;
+}
+
+#pake-identity-labels {
   color: #1452a1;
 }
 
+#srp-input-label-box {
+  color: white;
+}
+
+#srp-input-box:hover:active,
+#srp-input-box[open="true"] {
+  background-image: -moz-linear-gradient(rgba(0,0,0,.4), rgba(0,0,0,.1));
+}
+
+/*** SRP INPUT ***/
+
+#srp-input-panel {
+  width:250px;
+  padding:9px;
+  background-image: -moz-linear-gradient(rgba(41,218,45,.63), rgba(41,218,45,.1));
+}
+
+#srp-input-panel spacer {
+    height:15px;
+}
+
+#srp-input-panel label {
+    font-weight:bold;
+}

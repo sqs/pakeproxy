@@ -76,26 +76,31 @@ var process = {
           var certCache = decodeURI(addon.getResourceURI("resource/tmp").path);
           certCache = certCache.substring(0, certCache.length-1);
           process.args = ['-C', caCert, '-K', caKey, '-m', certCache];
+          dlog("run " + process.args.join(" "));
           process.run();
         } else alert("Can't find PAKEProxy executable at " + file.path);
       });
-    } else {      
-      process.instance.run(false, process.args, process.args.length);
-      window.setTimeout(function() {
-        dlog("Reloading page after pakeproxy had time to start...");
-        gBrowser.reload();
-      }, 150);
+    } else {
+      process.instance.runwAsync(process.args, process.args.length, process, false);
     }
   },
 
   kill: function() {
-    if (process.instance)
+    if (process.instance) {
       process.instance.kill();
+      process.instance = null;
+    }
   },
 
   observe: function(subject, topic, data) {
-    if (topic == "quit-application-requested")
+    if (topic == "quit-application-requested") {
       process.kill();
+    } else if (topic == "process-finished") {
+      if (process.instance)
+        alert("PAKEProxy background process was terminated. Please report this error.");
+    } else if (topic == "process-failed") {
+      alert("PAKEProxy background process failed to start. Please report this error.");
+    }
   }
 };
 
