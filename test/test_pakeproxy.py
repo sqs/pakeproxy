@@ -139,5 +139,13 @@ class TestPAKEProxy(TestCase):
         self.assertFalse(self.__detect_tls_srp('chaseonline.chase.com'))
         self.assertFalse(self.__detect_tls_srp('www.stanford.edu'))
 
-
-
+    def test_proxy_auth_challenge(self):
+        with pakeproxy() as pp:
+            try:
+                proxy_urlopen(pp, self.url)
+                self.assertTrue(False) # should fail b/c auth not provided
+            except CalledProcessError as e:
+                s = 'Proxy-Authenticate: Basic ' + \
+                    'realm="tls-srp.test.trustedhttp.org ' + \
+                    '(TLS-SRP via PAKEProxy)"'
+                self.assertIn(s, e.output)
